@@ -1,23 +1,132 @@
-import React, { useState } from 'react';
-import { Mail, Phone, MapPin, Briefcase, Award, Calendar, Edit, Building2, FolderKanban, CheckCircle2, X, Save, Users, FileText, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mail, Phone, MapPin, Briefcase, Award, Calendar, Edit, Building2, FolderKanban, CheckCircle2, X, Save, Users, FileText, Download, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useProjects } from '../contexts/ProjectsContext';
 
 export function PerfilPage() {
-  const { user, isDesigner, isCliente } = useAuth();
+  const { user, isDesigner, isCliente, updateProfile } = useAuth();
+  const { projetos } = useProjects();
+  
+  // Garante que projetos é sempre um array
+  const projetosArray = projetos || [];
+  
+  // Extrai clientes únicos dos projetos
+  const clientesUnicos = React.useMemo(() => {
+    const clientesMap = new Map<string, {
+      nome: string;
+      projetosAtivos: number;
+      projetosConcluidos: number;
+      total: number;
+    }>();
+    
+    projetosArray.forEach(projeto => {
+      const cliente = projeto.cliente;
+      if (!clientesMap.has(cliente)) {
+        clientesMap.set(cliente, {
+          nome: cliente,
+          projetosAtivos: 0,
+          projetosConcluidos: 0,
+          total: 0
+        });
+      }
+      
+      const clienteData = clientesMap.get(cliente)!;
+      clienteData.total++;
+      
+      if (projeto.status === 'Concluído') {
+        clienteData.projetosConcluidos++;
+      } else {
+        clienteData.projetosAtivos++;
+      }
+    });
+    
+    return Array.from(clientesMap.values());
+  }, [projetosArray]);
+  
+  // Calcula estatísticas reais dos projetos
+  const estatisticas = React.useMemo(() => {
+    const total = projetosArray.length;
+    const concluidos = projetosArray.filter(p => p.status === 'Concluído').length;
+    const emAndamento = projetosArray.filter(p => p.status === 'Em Andamento').length;
+    const clientes = clientesUnicos.length;
+    
+    return {
+      total,
+      concluidos,
+      emAndamento,
+      clientes
+    };
+  }, [projetosArray, clientesUnicos]);
+  
+  // Função para gerar iniciais do cliente
+  const gerarIniciais = (nome: string) => {
+    return nome.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+  };
+  
+  // Cores para os avatares dos clientes
+  const coresAvatar = ['bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-teal-500', 'bg-pink-500', 'bg-emerald-500', 'bg-indigo-500', 'bg-rose-500'];
+  const coresFundo = [
+    { from: 'from-blue-50', to: 'to-indigo-50', border: 'border-blue-200' },
+    { from: 'from-purple-50', to: 'to-pink-50', border: 'border-purple-200' },
+    { from: 'from-orange-50', to: 'to-amber-50', border: 'border-orange-200' },
+    { from: 'from-teal-50', to: 'to-cyan-50', border: 'border-teal-200' },
+    { from: 'from-pink-50', to: 'to-rose-50', border: 'border-pink-200' },
+    { from: 'from-emerald-50', to: 'to-green-50', border: 'border-emerald-200' },
+    { from: 'from-indigo-50', to: 'to-blue-50', border: 'border-indigo-200' },
+    { from: 'from-rose-50', to: 'to-pink-50', border: 'border-rose-200' }
+  ];
+  
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [modalSalvarAberto, setModalSalvarAberto] = useState(false);
   const [modalFotoAberto, setModalFotoAberto] = useState(false);
   const [modalCurriculoAberto, setModalCurriculoAberto] = useState(false);
-  const [tipoEdicao, setTipoEdicao] = useState<'sobre' | 'experiencia' | 'habilidades' | 'empresa' | null>(null);
+  const [modalInfoPessoalAberto, setModalInfoPessoalAberto] = useState(false);
+  const [tipoEdicao, setTipoEdicao] = useState<'sobre' | 'experiencia' | 'habilidades' | 'empresa' | 'infopessoal' | null>(null);
+  
+  // Estados para edição
+  const [editSobre, setEditSobre] = useState('');
+  const [editCargo, setEditCargo] = useState('');
+  const [editTelefone, setEditTelefone] = useState('');
+  const [editLocalizacao, setEditLocalizacao] = useState('');
+  const [editEmpresaNome, setEditEmpresaNome] = useState('');
+  const [editSegmento, setEditSegmento] = useState('');
+  const [editHabilidades, setEditHabilidades] = useState<string[]>([]);
+  const [novaHabilidade, setNovaHabilidade] = useState('');
+  
+  // Estados para experiências
+  const [editExperiencias, setEditExperiencias] = useState<{cargo: string; empresa: string; periodo: string}[]>([]);
+  const [novaExpCargo, setNovaExpCargo] = useState('');
+  const [novaExpEmpresa, setNovaExpEmpresa] = useState('');
+  const [novaExpPeriodo, setNovaExpPeriodo] = useState('');
 
-  const abrirModalEdicao = (tipo: 'sobre' | 'experiencia' | 'habilidades' | 'empresa') => {
+  const abrirModalEdicao = (tipo: 'sobre' | 'experiencia' | 'habilidades' | 'empresa' | 'infopessoal') => {
     setTipoEdicao(tipo);
+    
+    if (tipo === 'sobre') {
+      setEditSobre(user?.perfil?.sobre || '');
+    } else if (tipo === 'habilidades') {
+      setEditHabilidades(user?.perfil?.habilidades || []);
+    } else if (tipo === 'empresa') {
+      setEditEmpresaNome(user?.perfil?.empresaNome || '');
+      setEditSegmento(user?.perfil?.segmento || '');
+    } else if (tipo === 'infopessoal') {
+      setEditCargo(user?.perfil?.cargo || '');
+      setEditTelefone(user?.perfil?.telefone || '');
+      setEditLocalizacao(user?.perfil?.localizacao || '');
+    } else if (tipo === 'experiencia') {
+      setEditExperiencias(user?.perfil?.experiencias || []);
+    }
+    
     setModalEdicaoAberto(true);
   };
 
   const fecharModalEdicao = () => {
     setModalEdicaoAberto(false);
     setTipoEdicao(null);
+    setNovaHabilidade('');
+    setNovaExpCargo('');
+    setNovaExpEmpresa('');
+    setNovaExpPeriodo('');
   };
 
   const abrirModalSalvar = () => {
@@ -31,9 +140,25 @@ export function PerfilPage() {
   };
 
   const confirmarSalvar = () => {
-    // Aqui você salvaria as alterações
+    if (tipoEdicao === 'sobre') {
+      updateProfile({ sobre: editSobre });
+    } else if (tipoEdicao === 'habilidades') {
+      updateProfile({ habilidades: editHabilidades });
+    } else if (tipoEdicao === 'empresa') {
+      updateProfile({ empresaNome: editEmpresaNome, segmento: editSegmento });
+    } else if (tipoEdicao === 'infopessoal') {
+      updateProfile({ cargo: editCargo, telefone: editTelefone, localizacao: editLocalizacao });
+    } else if (tipoEdicao === 'experiencia') {
+      updateProfile({ experiencias: editExperiencias });
+    }
+    
+    // Limpar estados temporários
     setModalSalvarAberto(false);
     setTipoEdicao(null);
+    setNovaExpCargo('');
+    setNovaExpEmpresa('');
+    setNovaExpPeriodo('');
+    setNovaHabilidade('');
   };
 
   const abrirModalFoto = () => {
@@ -55,6 +180,34 @@ export function PerfilPage() {
 
   const fecharModalCurriculo = () => {
     setModalCurriculoAberto(false);
+  };
+
+  const adicionarHabilidade = () => {
+    if (novaHabilidade.trim() && !editHabilidades.includes(novaHabilidade.trim())) {
+      setEditHabilidades([...editHabilidades, novaHabilidade.trim()]);
+      setNovaHabilidade('');
+    }
+  };
+
+  const removerHabilidade = (habilidade: string) => {
+    setEditHabilidades(editHabilidades.filter(h => h !== habilidade));
+  };
+
+  const adicionarExperiencia = () => {
+    if (novaExpCargo.trim() && novaExpEmpresa.trim() && novaExpPeriodo.trim()) {
+      setEditExperiencias([...editExperiencias, {
+        cargo: novaExpCargo.trim(), 
+        empresa: novaExpEmpresa.trim(), 
+        periodo: novaExpPeriodo.trim()
+      }]);
+      setNovaExpCargo('');
+      setNovaExpEmpresa('');
+      setNovaExpPeriodo('');
+    }
+  };
+
+  const removerExperiencia = (index: number) => {
+    setEditExperiencias(editExperiencias.filter((_, i) => i !== index));
   };
 
   const exportarCurriculoPDF = () => {
@@ -129,7 +282,7 @@ export function PerfilPage() {
               {user?.nome || 'Usuário'}
             </h3>
             <p className="text-slate-600 mb-6 font-['Kumbh_Sans',sans-serif] text-[16px] font-normal leading-[24px]">
-              {isDesigner ? 'Designer Sênior & Criativo' : 'Cliente Premium'}
+              {user?.perfil?.cargo || (isDesigner ? 'Designer' : 'Cliente')}
             </p>
 
             <div className="space-y-3 text-left">
@@ -137,24 +290,37 @@ export function PerfilPage() {
                 <Mail size={18} className="text-blue-600" />
                 <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">{user?.email || 'email@exemplo.com'}</span>
               </div>
-              {isCliente && (
+              {isCliente && user?.perfil?.empresaNome && (
                 <div className="flex items-center gap-3 text-slate-700">
                   <Building2 size={18} className="text-blue-600" />
-                  <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">TechCorp Solutions</span>
+                  <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">{user.perfil.empresaNome}</span>
                 </div>
               )}
               <div className="flex items-center gap-3 text-slate-700">
                 <Phone size={18} className="text-blue-600" />
-                <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">+55 (11) 98765-4321</span>
+                <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
+                  {user?.perfil?.telefone || 'Não informado'}
+                </span>
               </div>
               <div className="flex items-center gap-3 text-slate-700">
                 <MapPin size={18} className="text-blue-600" />
-                <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">São Paulo, Brasil</span>
+                <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
+                  {user?.perfil?.localizacao || 'Não informado'}
+                </span>
               </div>
               <div className="flex items-center gap-3 text-slate-700">
                 <Calendar size={18} className="text-blue-600" />
-                <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">Membro desde Jan 2024</span>
+                <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
+                  Membro desde {user?.perfil?.membroDesde || 'N/A'}
+                </span>
               </div>
+              <button
+                onClick={() => abrirModalEdicao('infopessoal')}
+                className="w-full mt-4 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2"
+              >
+                <Edit size={16} />
+                Editar Informações
+              </button>
             </div>
           </div>
         </div>
@@ -177,11 +343,24 @@ export function PerfilPage() {
                     <Edit size={18} />
                   </button>
                 </div>
-                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[16px] font-normal leading-[24px]">
-                  Designer com mais de 8 anos de experiência em branding, design de interfaces e 
-                  experiência do usuário. Apaixonado por criar soluções visuais que conectam marcas 
-                  com seus públicos de forma autêntica e memorável.
-                </p>
+                {user?.perfil?.sobre ? (
+                  <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[16px] font-normal leading-[24px]">
+                    {user.perfil.sobre}
+                  </p>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[20px] mb-3">
+                      Conte um pouco sobre você e sua experiência profissional
+                    </p>
+                    <button
+                      onClick={() => abrirModalEdicao('sobre')}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                    >
+                      <Plus size={16} />
+                      Adicionar Descrição
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Experience */}
@@ -198,41 +377,41 @@ export function PerfilPage() {
                   </button>
                 </div>
                 
-                <div className="space-y-4">
-                  <div className="flex gap-4 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Briefcase className="text-blue-600" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[16px] mb-1">
-                        Designer Sênior
-                      </h5>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] mb-1">
-                        DesignFlow Studio
-                      </p>
-                      <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px]">
-                        Jan 2024 - Presente
-                      </p>
-                    </div>
+                {user?.perfil?.experiencias && user.perfil.experiencias.length > 0 ? (
+                  <div className="space-y-4">
+                    {user.perfil.experiencias.map((exp, index) => (
+                      <div key={index} className="flex gap-4 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+                        <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <Briefcase className="text-blue-600" size={24} />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[16px] mb-1">
+                            {exp.cargo}
+                          </h5>
+                          <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] mb-1">
+                            {exp.empresa}
+                          </p>
+                          <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px]">
+                            {exp.periodo}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="flex gap-4 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Briefcase className="text-purple-600" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[16px] mb-1">
-                        Designer de Produto
-                      </h5>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] mb-1">
-                        TechVision Labs
-                      </p>
-                      <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px]">
-                        Mar 2020 - Dez 2023
-                      </p>
-                    </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[20px] mb-3">
+                      Adicione suas experiências profissionais
+                    </p>
+                    <button
+                      onClick={() => abrirModalEdicao('experiencia')}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                    >
+                      <Plus size={16} />
+                      Adicionar Experiência
+                    </button>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Skills */}
@@ -249,25 +428,41 @@ export function PerfilPage() {
                   </button>
                 </div>
                 
-                <div className="flex flex-wrap gap-2">
-                  {['UI/UX Design', 'Branding', 'Figma', 'Adobe Creative Suite', 'Prototipagem', 'Design Systems', 'Ilustração', 'Motion Design'].map((skill) => (
-                    <span
-                      key={skill}
-                      className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium leading-[16px]"
+                {user?.perfil?.habilidades && user.perfil.habilidades.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {user.perfil.habilidades.map((skill, index) => (
+                      <span
+                        key={index}
+                        className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium leading-[16px]"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[20px] mb-3">
+                      Adicione suas habilidades e competências
+                    </p>
+                    <button
+                      onClick={() => abrirModalEdicao('habilidades')}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
                     >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
+                      <Plus size={16} />
+                      Adicionar Habilidades
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Stats */}
+              {projetosArray.length > 0 && (
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
                   <div className="flex items-center gap-3 mb-2">
                     <Award className="text-blue-600" size={24} />
                   </div>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">24</p>
+                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">{estatisticas.concluidos}</p>
                   <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
                     Projetos Concluídos
                   </p>
@@ -277,7 +472,7 @@ export function PerfilPage() {
                   <div className="flex items-center gap-3 mb-2">
                     <Briefcase className="text-purple-600" size={24} />
                   </div>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">4</p>
+                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">{estatisticas.emAndamento}</p>
                   <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
                     Projetos Ativos
                   </p>
@@ -287,14 +482,16 @@ export function PerfilPage() {
                   <div className="flex items-center gap-3 mb-2">
                     <Award className="text-green-600" size={24} />
                   </div>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">18</p>
+                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">{estatisticas.clientes}</p>
                   <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
-                    Clientes Satisfeitos
+                    Clientes Atendidos
                   </p>
                 </div>
               </div>
+              )}
 
               {/* Minhas Empresas */}
+              {projetosArray.length > 0 && (
               <div className="bg-white rounded-2xl p-6 border border-slate-200">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[20px] font-semibold leading-[24px] flex items-center gap-2">
@@ -302,138 +499,48 @@ export function PerfilPage() {
                     Clientes e Empresas
                   </h4>
                   <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-['Kumbh_Sans',sans-serif] text-[12px] font-semibold">
-                    6 empresas
+                    {clientesUnicos.length} {clientesUnicos.length === 1 ? 'empresa' : 'empresas'}
                   </span>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[16px] font-bold flex-shrink-0">
-                        TC
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          TechCorp Solutions
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          3 projetos ativos
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-green-500 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            Ativo
-                          </span>
+                  {clientesUnicos.map((cliente, index) => {
+                    const corAvatar = coresAvatar[index % coresAvatar.length];
+                    const corFundo = coresFundo[index % coresFundo.length];
+                    const temAtivos = cliente.projetosAtivos > 0;
+                    
+                    return (
+                      <div 
+                        key={cliente.nome}
+                        className={`bg-gradient-to-r ${corFundo.from} ${corFundo.to} border ${corFundo.border} rounded-xl p-4 hover:shadow-md transition-shadow`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`w-10 h-10 ${corAvatar} rounded-lg flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[16px] font-bold flex-shrink-0`}>
+                            {gerarIniciais(cliente.nome)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
+                              {cliente.nome}
+                            </h5>
+                            <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
+                              {temAtivos 
+                                ? `${cliente.projetosAtivos} projeto${cliente.projetosAtivos > 1 ? 's' : ''} ativo${cliente.projetosAtivos > 1 ? 's' : ''}`
+                                : `${cliente.projetosConcluidos} projeto${cliente.projetosConcluidos > 1 ? 's' : ''} concluído${cliente.projetosConcluidos > 1 ? 's' : ''}`
+                              }
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <span className={`${temAtivos ? 'bg-green-500' : 'bg-slate-400'} text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold`}>
+                                {temAtivos ? 'Ativo' : 'Concluído'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[16px] font-bold flex-shrink-0">
-                        SI
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          StartupHub Incubadora
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          2 projetos ativos
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-green-500 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            Ativo
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[16px] font-bold flex-shrink-0">
-                        EF
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          EcoFriendly Brasil
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          1 projeto ativo
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-green-500 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            Ativo
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[16px] font-bold flex-shrink-0">
-                        FA
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          FashionArt Studio
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          5 projetos concluídos
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-400 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            Concluído
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-pink-500 rounded-lg flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[16px] font-bold flex-shrink-0">
-                        FD
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          FoodDelivery Express
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          4 projetos concluídos
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-400 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            Concluído
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[16px] font-bold flex-shrink-0">
-                        ST
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          SmartTech Inovações
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          2 projetos concluídos
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-400 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            Concluído
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
+              )}
             </>
           ) : (
             <>
@@ -452,249 +559,148 @@ export function PerfilPage() {
                   </button>
                 </div>
                 
-                <div className="space-y-4">
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Building2 className="text-blue-600" size={24} />
+                {user?.perfil?.empresaNome || user?.perfil?.segmento ? (
+                  <div className="space-y-4">
+                    <div className="flex gap-4">
+                      <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Building2 className="text-blue-600" size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-medium leading-[14px] mb-1">
+                          Nome da Empresa
+                        </p>
+                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
+                          {user?.perfil?.empresaNome || 'Não informado'}
+                        </h5>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-medium leading-[14px] mb-1">
-                        Nome da Empresa
-                      </p>
-                      <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
-                        TechCorp Solutions
-                      </h5>
+                    
+                    <div className="flex gap-4">
+                      <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Briefcase className="text-purple-600" size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-medium leading-[14px] mb-1">
+                          Segmento
+                        </p>
+                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
+                          {user?.perfil?.segmento || 'Não informado'}
+                        </h5>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Briefcase className="text-purple-600" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-medium leading-[14px] mb-1">
-                        Segmento
-                      </p>
-                      <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
-                        Tecnologia e Inovação
-                      </h5>
-                    </div>
-                  </div>
 
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <MapPin className="text-green-600" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-medium leading-[14px] mb-1">
-                        Localização
-                      </p>
-                      <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
-                        São Paulo, SP - Brasil
-                      </h5>
+                    <div className="flex gap-4">
+                      <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <MapPin className="text-green-600" size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-medium leading-[14px] mb-1">
+                          Localização
+                        </p>
+                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
+                          {user?.perfil?.localizacao || 'Não informado'}
+                        </h5>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[20px] mb-3">
+                      Adicione as informações da sua empresa
+                    </p>
+                    <button
+                      onClick={() => abrirModalEdicao('empresa')}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                    >
+                      <Plus size={16} />
+                      Adicionar Informações
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Meus Projetos */}
+              {projetosArray.length > 0 && (
               <div className="bg-white rounded-2xl p-6 border border-slate-200">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[20px] font-semibold leading-[24px]">
                     Meus Projetos
                   </h4>
+                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-['Kumbh_Sans',sans-serif] text-[12px] font-semibold">
+                    {projetosArray.length} {projetosArray.length === 1 ? 'projeto' : 'projetos'}
+                  </span>
                 </div>
                 
                 <div className="space-y-3">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
-                        Redesign Website Corporativo
-                      </h5>
-                      <span className="bg-blue-500 text-white px-2 py-1 rounded-md font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold leading-[12px]">
-                        Em Andamento
-                      </span>
-                    </div>
-                    <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px] mb-3">
-                      Redesign completo do website institucional
-                    </p>
-                    <div className="flex items-center gap-4 text-slate-600">
-                      <div className="flex items-center gap-1">
-                        <FolderKanban size={14} />
-                        <span className="font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px]">
-                          65% completo
-                        </span>
+                  {projetosArray.slice(0, 5).map((projeto) => {
+                    const isConcluido = projeto.status === 'Concluído';
+                    const corFundo = isConcluido 
+                      ? 'from-green-50 to-emerald-50 border-green-200'
+                      : 'from-blue-50 to-indigo-50 border-blue-200';
+                    const corBadge = isConcluido 
+                      ? 'bg-green-500'
+                      : 'bg-blue-500';
+                    
+                    return (
+                      <div key={projeto.id} className={`bg-gradient-to-r ${corFundo} border rounded-xl p-4`}>
+                        <div className="flex items-start justify-between mb-2">
+                          <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
+                            {projeto.titulo}
+                          </h5>
+                          <span className={`${corBadge} text-white px-2 py-1 rounded-md font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold leading-[12px]`}>
+                            {projeto.status}
+                          </span>
+                        </div>
+                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px] mb-3">
+                          Cliente: {projeto.cliente}
+                        </p>
+                        <div className="flex items-center gap-4 text-slate-600">
+                          <div className="flex items-center gap-1">
+                            {isConcluido ? <CheckCircle2 size={14} /> : <FolderKanban size={14} />}
+                            <span className="font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px]">
+                              {isConcluido ? '100% completo' : `${projeto.progresso || 0}% completo`}
+                            </span>
+                          </div>
+                          {projeto.dataEntrega && (
+                            <div className="flex items-center gap-1">
+                              <Calendar size={14} />
+                              <span className="font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px]">
+                                {isConcluido ? 'Entregue' : 'Previsão'}: {projeto.dataEntrega}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Calendar size={14} />
-                        <span className="font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px]">
-                          Previsão: 15/12/2024
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
-                        Logo e Identidade Visual
-                      </h5>
-                      <span className="bg-green-500 text-white px-2 py-1 rounded-md font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold leading-[12px]">
-                        Concluído
-                      </span>
-                    </div>
-                    <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px] mb-3">
-                      Criação da identidade visual da marca
-                    </p>
-                    <div className="flex items-center gap-4 text-slate-600">
-                      <div className="flex items-center gap-1">
-                        <CheckCircle2 size={14} />
-                        <span className="font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px]">
-                          Finalizado
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Calendar size={14} />
-                        <span className="font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px]">
-                          Concluído em 20/10/2024
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
+              )}
 
               {/* Stats do Cliente */}
-              <div className="grid grid-cols-3 gap-4">
+              {projetosArray.length > 0 && (
+              <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
                   <div className="flex items-center gap-3 mb-2">
                     <FolderKanban className="text-blue-600" size={24} />
                   </div>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">2</p>
+                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">{estatisticas.emAndamento}</p>
                   <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
                     Projetos Ativos
                   </p>
                 </div>
 
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border border-purple-200">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-200">
                   <div className="flex items-center gap-3 mb-2">
-                    <CheckCircle2 className="text-purple-600" size={24} />
+                    <CheckCircle2 className="text-green-600" size={24} />
                   </div>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">3</p>
+                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">{estatisticas.concluidos}</p>
                   <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
                     Projetos Concluídos
                   </p>
                 </div>
-
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-200">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Calendar className="text-green-600" size={24} />
-                  </div>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-1">8</p>
-                  <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
-                    Meses de Parceria
-                  </p>
-                </div>
               </div>
-
-              {/* Designers Colaboradores */}
-              <div className="bg-white rounded-2xl p-6 border border-slate-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[20px] font-semibold leading-[24px] flex items-center gap-2">
-                    <Users size={20} className="text-blue-600" />
-                    Designers Colaboradores
-                  </h4>
-                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-['Kumbh_Sans',sans-serif] text-[12px] font-semibold">
-                    4 designers
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[18px] font-bold flex-shrink-0">
-                        LS
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          Lucas Silva
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          Designer Sênior • UI/UX Specialist
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-green-500 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            2 Projetos Ativos
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[18px] font-bold flex-shrink-0">
-                        MO
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          Marina Oliveira
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          Designer Pleno • Branding Expert
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-green-500 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            1 Projeto Ativo
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[18px] font-bold flex-shrink-0">
-                        RC
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          Rafael Costa
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          Designer Júnior • Motion Designer
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-400 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            2 Projetos Concluídos
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[18px] font-bold flex-shrink-0">
-                        AS
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                          Ana Santos
-                        </h5>
-                        <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-2">
-                          Designer Sênior • Ilustradora
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-slate-400 text-white px-2 py-0.5 rounded font-['Kumbh_Sans',sans-serif] text-[10px] font-semibold">
-                            1 Projeto Concluído
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
             </>
           )}
         </div>
@@ -702,15 +708,15 @@ export function PerfilPage() {
 
       {/* Modal de Edição */}
       {modalEdicaoAberto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[24px] font-bold leading-[28px]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[28px] font-semibold leading-[32px]">
                 {tipoEdicao === 'sobre' && 'Editar Sobre Mim'}
                 {tipoEdicao === 'experiencia' && 'Editar Experiência'}
                 {tipoEdicao === 'habilidades' && 'Editar Habilidades'}
                 {tipoEdicao === 'empresa' && 'Editar Informações da Empresa'}
+                {tipoEdicao === 'infopessoal' && 'Editar Informações Pessoais'}
               </h3>
               <button
                 onClick={fecharModalEdicao}
@@ -720,80 +726,254 @@ export function PerfilPage() {
               </button>
             </div>
 
-            {/* Body */}
-            <div className="p-6">
+            {tipoEdicao === 'sobre' && (
               <div className="space-y-4">
-                {tipoEdicao === 'sobre' && (
-                  <div>
-                    <label className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] mb-2 block">
-                      Descrição
-                    </label>
-                    <textarea
-                      placeholder="Conte um pouco sobre você..."
-                      rows={6}
-                      defaultValue="Designer com mais de 8 anos de experiência em branding, design de interfaces e experiência do usuário. Apaixonado por criar soluções visuais que conectam marcas com seus públicos de forma autêntica e memorável."
-                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px] resize-none"
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Sobre Você
+                  </label>
+                  <textarea
+                    value={editSobre}
+                    onChange={(e) => setEditSobre(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px] min-h-[150px]"
+                    placeholder="Conte um pouco sobre você, sua experiência e paixão pelo design..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {tipoEdicao === 'habilidades' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Adicionar Habilidade
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={novaHabilidade}
+                      onChange={(e) => setNovaHabilidade(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && adicionarHabilidade()}
+                      className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                      placeholder="Ex: UI/UX Design"
                     />
+                    <button
+                      onClick={adicionarHabilidade}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                    >
+                      <Plus size={20} />
+                    </button>
                   </div>
-                )}
-
-                {tipoEdicao === 'experiencia' && (
-                  <div className="space-y-4">
-                    <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px]">
-                      Funcionalidade de edição de experiência em desenvolvimento...
-                    </p>
-                  </div>
-                )}
-
-                {tipoEdicao === 'habilidades' && (
-                  <div className="space-y-4">
-                    <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px]">
-                      Funcionalidade de edição de habilidades em desenvolvimento...
-                    </p>
-                  </div>
-                )}
-
-                {tipoEdicao === 'empresa' && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] mb-2 block">
-                        Nome da Empresa
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="TechCorp Solutions"
-                        className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] mb-2 block">
-                        Segmento
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue="Tecnologia e Inovação"
-                        className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
-                      />
+                </div>
+                
+                {editHabilidades.length > 0 && (
+                  <div>
+                    <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                      Suas Habilidades
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {editHabilidades.map((skill, index) => (
+                        <div
+                          key={index}
+                          className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium flex items-center gap-2"
+                        >
+                          {skill}
+                          <button
+                            onClick={() => removerHabilidade(skill)}
+                            className="text-blue-400 hover:text-blue-600"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Footer */}
-            <div className="flex gap-3 p-6 border-t border-slate-200">
+            {tipoEdicao === 'experiencia' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Adicionar Experiência
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={novaExpCargo}
+                      onChange={(e) => setNovaExpCargo(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && adicionarExperiencia()}
+                      className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                      placeholder="Ex: Designer Sênior"
+                    />
+                    <input
+                      type="text"
+                      value={novaExpEmpresa}
+                      onChange={(e) => setNovaExpEmpresa(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && adicionarExperiencia()}
+                      className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                      placeholder="Ex: TechCorp Solutions"
+                    />
+                    <input
+                      type="text"
+                      value={novaExpPeriodo}
+                      onChange={(e) => setNovaExpPeriodo(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && adicionarExperiencia()}
+                      className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                      placeholder="Ex: 2018 - 2020"
+                    />
+                    <button
+                      onClick={adicionarExperiencia}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
+                </div>
+                
+                {editExperiencias.length > 0 && (
+                  <div>
+                    <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                      Suas Experiências
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {editExperiencias.map((exp, index) => (
+                        <div
+                          key={index}
+                          className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium flex items-center gap-2"
+                        >
+                          {exp.cargo} - {exp.empresa} ({exp.periodo})
+                          <button
+                            onClick={() => removerExperiencia(index)}
+                            className="text-blue-400 hover:text-blue-600"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tipoEdicao === 'empresa' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Nome da Empresa
+                  </label>
+                  <input
+                    type="text"
+                    value={editEmpresaNome}
+                    onChange={(e) => setEditEmpresaNome(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                    placeholder="Ex: TechCorp Solutions"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Segmento
+                  </label>
+                  <input
+                    type="text"
+                    value={editSegmento}
+                    onChange={(e) => setEditSegmento(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                    placeholder="Ex: Tecnologia e Inovação"
+                  />
+                </div>
+              </div>
+            )}
+
+            {tipoEdicao === 'infopessoal' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Cargo
+                  </label>
+                  <input
+                    type="text"
+                    value={editCargo}
+                    onChange={(e) => setEditCargo(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                    placeholder="Ex: Designer Sênior & Criativo"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Telefone
+                  </label>
+                  <input
+                    type="text"
+                    value={editTelefone}
+                    onChange={(e) => setEditTelefone(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                    placeholder="Ex: +55 (11) 98765-4321"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold mb-2">
+                    Localização
+                  </label>
+                  <input
+                    type="text"
+                    value={editLocalizacao}
+                    onChange={(e) => setEditLocalizacao(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                    placeholder="Ex: São Paulo, Brasil"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
               <button
                 onClick={fecharModalEdicao}
-                className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
               >
                 Cancelar
               </button>
               <button
                 onClick={abrirModalSalvar}
-                className="flex-1 px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
               >
-                <Save size={18} />
-                Salvar
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Salvamento */}
+      {modalSalvarAberto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Save className="text-green-600" size={32} />
+              </div>
+              <h3 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[24px] font-semibold leading-[28px] mb-2">
+                Salvar Alterações?
+              </h3>
+              <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[20px]">
+                Deseja salvar as alterações realizadas no seu perfil?
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={fecharModalSalvar}
+                className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarSalvar}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+              >
+                Confirmar
               </button>
             </div>
           </div>
@@ -802,11 +982,10 @@ export function PerfilPage() {
 
       {/* Modal de Alterar Foto */}
       {modalFotoAberto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[24px] font-bold leading-[28px]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[24px] font-semibold leading-[28px]">
                 Alterar Foto de Perfil
               </h3>
               <button
@@ -817,113 +996,35 @@ export function PerfilPage() {
               </button>
             </div>
 
-            {/* Body */}
-            <div className="p-6">
-              <div className="flex flex-col items-center gap-4 mb-4">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[36px] font-bold leading-[42px]">
-                  {user?.avatar || 'U'}
-                </div>
-                <div className="text-center">
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                    Escolha uma nova foto
-                  </p>
-                  <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px]">
-                    Formatos aceitos: JPG, PNG (máx. 5MB)
-                  </p>
-                </div>
-                <button className="px-6 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold">
-                  Escolher Arquivo
-                </button>
+            <div className="text-center mb-6">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[48px] font-bold leading-[58px] mx-auto mb-4">
+                {user?.avatar || 'U'}
               </div>
+              <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[20px]">
+                Funcionalidade de upload de foto será implementada em breve.
+              </p>
             </div>
 
-            {/* Footer */}
-            <div className="flex gap-3 p-6 border-t border-slate-200">
+            <div className="flex gap-3">
               <button
                 onClick={fecharModalFoto}
-                className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
               >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmarAlterarFoto}
-                className="flex-1 px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
-              >
-                Salvar Foto
+                Fechar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de Confirmação de Salvamento */}
-      {modalSalvarAberto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[24px] font-bold leading-[28px]">
-                Confirmar Alterações
-              </h3>
-              <button
-                onClick={fecharModalSalvar}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-2xl">
-                  💾
-                </div>
-                <div>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px] mb-1">
-                    Salvar alterações?
-                  </p>
-                  <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px]">
-                    As informações do seu perfil serão atualizadas.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex gap-3 p-6 border-t border-slate-200">
-              <button
-                onClick={fecharModalSalvar}
-                className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmarSalvar}
-                className="flex-1 px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2"
-              >
-                <Save size={18} />
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Currículo */}
+      {/* Modal de Currículo - Mantém a implementação existente */}
       {modalCurriculoAberto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <div>
-                <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[24px] font-bold leading-[28px] mb-1">
-                  📄 Currículo Rápido
-                </h3>
-                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px]">
-                  Pré-visualização do seu currículo profissional
-                </p>
-              </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[28px] font-semibold leading-[32px]">
+                Pré-visualização do Currículo
+              </h3>
               <button
                 onClick={fecharModalCurriculo}
                 className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -932,172 +1033,93 @@ export function PerfilPage() {
               </button>
             </div>
 
-            {/* Currículo Preview */}
-            <div className="p-6 bg-slate-50 max-h-[60vh] overflow-y-auto">
-              <div id="curriculo-preview" className="bg-white p-8 shadow-sm">
+            <div id="curriculo-preview" className="bg-white p-12 mb-6">
+              <div className="max-w-3xl mx-auto">
                 {/* Header do Currículo */}
-                <div className="text-center mb-6 pb-6 border-b-2 border-blue-500">
-                  <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-['Maven_Pro',sans-serif] text-[36px] font-bold">
-                    {user?.avatar || 'U'}
-                  </div>
-                  <h1 className="text-slate-900 font-['Maven_Pro',sans-serif] text-[32px] font-bold mb-2">
-                    {user?.nome || 'Usuário'}
+                <div className="text-center mb-8 pb-8 border-b-2 border-slate-200">
+                  <h1 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[36px] font-bold leading-[42px] mb-2">
+                    {user?.nome || 'Seu Nome'}
                   </h1>
-                  <p className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[18px] font-medium mb-4">
-                    Designer Sênior & Criativo
+                  <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[18px] font-medium mb-4">
+                    {user?.perfil?.cargo || 'Designer'}
                   </p>
-                  
-                  <div className="flex flex-wrap justify-center gap-4 text-slate-600">
-                    <div className="flex items-center gap-2">
-                      <Mail size={16} className="text-blue-600" />
-                      <span className="font-['Kumbh_Sans',sans-serif] text-[14px]">{user?.email || 'email@exemplo.com'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone size={16} className="text-blue-600" />
-                      <span className="font-['Kumbh_Sans',sans-serif] text-[14px]">+55 (11) 98765-4321</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin size={16} className="text-blue-600" />
-                      <span className="font-['Kumbh_Sans',sans-serif] text-[14px]">São Paulo, Brasil</span>
-                    </div>
+                  <div className="flex justify-center gap-6 text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px]">
+                    <span>{user?.email}</span>
+                    <span>{user?.perfil?.telefone || 'Telefone não informado'}</span>
+                    <span>{user?.perfil?.localizacao || 'Localização não informada'}</span>
                   </div>
                 </div>
 
                 {/* Sobre */}
-                <div className="mb-6">
-                  <h2 className="text-slate-900 font-['Maven_Pro',sans-serif] text-[20px] font-bold mb-3 flex items-center gap-2">
-                    <div className="w-8 h-1 bg-blue-500 rounded"></div>
-                    Perfil Profissional
-                  </h2>
-                  <p className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] leading-[22px]">
-                    Designer com mais de 8 anos de experiência em branding, design de interfaces e 
-                    experiência do usuário. Apaixonado por criar soluções visuais que conectam marcas 
-                    com seus públicos de forma autêntica e memorável.
-                  </p>
-                </div>
+                {user?.perfil?.sobre && (
+                  <div className="mb-8">
+                    <h2 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[24px] font-bold leading-[28px] mb-3">
+                      Sobre
+                    </h2>
+                    <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] leading-[22px]">
+                      {user.perfil.sobre}
+                    </p>
+                  </div>
+                )}
 
                 {/* Experiência */}
-                <div className="mb-6">
-                  <h2 className="text-slate-900 font-['Maven_Pro',sans-serif] text-[20px] font-bold mb-3 flex items-center gap-2">
-                    <div className="w-8 h-1 bg-blue-500 rounded"></div>
-                    Experiência Profissional
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-bold">
-                        Designer Sênior
-                      </h3>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium">
-                        DesignFlow Studio
-                      </p>
-                      <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] mb-2">
-                        Jan 2024 - Presente
-                      </p>
-                      <p className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[13px] leading-[20px]">
-                        Liderança em projetos de branding e design de interfaces, gerenciando equipes multidisciplinares 
-                        e entregando soluções criativas para clientes nacionais e internacionais.
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-bold">
-                        Designer de Produto
-                      </h3>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium">
-                        TechVision Labs
-                      </p>
-                      <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] mb-2">
-                        Mar 2020 - Dez 2023
-                      </p>
-                      <p className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[13px] leading-[20px]">
-                        Desenvolvimento de interfaces e experiências digitais para produtos SaaS, 
-                        com foco em usabilidade e design centrado no usuário.
-                      </p>
+                {user?.perfil?.experiencias && user.perfil.experiencias.length > 0 && (
+                  <div className="mb-8">
+                    <h2 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[24px] font-bold leading-[28px] mb-4">
+                      Experiência Profissional
+                    </h2>
+                    <div className="space-y-4">
+                      {user.perfil.experiencias.map((exp, index) => (
+                        <div key={index} className="pb-4 border-b border-slate-100 last:border-0">
+                          <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-bold mb-1">
+                            {exp.cargo}
+                          </h3>
+                          <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium mb-1">
+                            {exp.empresa}
+                          </p>
+                          <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px]">
+                            {exp.periodo}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Habilidades */}
-                <div className="mb-6">
-                  <h2 className="text-slate-900 font-['Maven_Pro',sans-serif] text-[20px] font-bold mb-3 flex items-center gap-2">
-                    <div className="w-8 h-1 bg-blue-500 rounded"></div>
-                    Habilidades Técnicas
-                  </h2>
-                  
-                  <div className="flex flex-wrap gap-2">
-                    {['UI/UX Design', 'Branding', 'Figma', 'Adobe Creative Suite', 'Prototipagem', 'Design Systems', 'Ilustração', 'Motion Design'].map((skill) => (
-                      <span
-                        key={skill}
-                        className="bg-slate-100 text-slate-700 px-3 py-1 rounded border border-slate-300 font-['Kumbh_Sans',sans-serif] text-[12px] font-medium"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Empresas */}
-                <div className="mb-6">
-                  <h2 className="text-slate-900 font-['Maven_Pro',sans-serif] text-[20px] font-bold mb-3 flex items-center gap-2">
-                    <div className="w-8 h-1 bg-blue-500 rounded"></div>
-                    Empresas Colaboradoras
-                  </h2>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="border border-slate-200 rounded p-3">
-                      <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold">TechCorp Solutions</p>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px]">3 projetos ativos</p>
-                    </div>
-                    <div className="border border-slate-200 rounded p-3">
-                      <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold">StartupHub Incubadora</p>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px]">2 projetos ativos</p>
-                    </div>
-                    <div className="border border-slate-200 rounded p-3">
-                      <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold">EcoFriendly Brasil</p>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px]">1 projeto ativo</p>
-                    </div>
-                    <div className="border border-slate-200 rounded p-3">
-                      <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold">FashionArt Studio</p>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px]">5 projetos concluídos</p>
+                {user?.perfil?.habilidades && user.perfil.habilidades.length > 0 && (
+                  <div className="mb-8">
+                    <h2 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[24px] font-bold leading-[28px] mb-3">
+                      Habilidades
+                    </h2>
+                    <div className="flex flex-wrap gap-2">
+                      {user.perfil.habilidades.map((skill, index) => (
+                        <span
+                          key={index}
+                          className="bg-slate-100 text-slate-700 px-3 py-1 rounded font-['Kumbh_Sans',sans-serif] text-[12px] font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
                     </div>
                   </div>
-                </div>
-
-                {/* Estatísticas */}
-                <div className="border-t-2 border-slate-200 pt-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center">
-                      <p className="text-slate-900 font-['Maven_Pro',sans-serif] text-[28px] font-bold">24</p>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px]">Projetos Concluídos</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-slate-900 font-['Maven_Pro',sans-serif] text-[28px] font-bold">4</p>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px]">Projetos Ativos</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-slate-900 font-['Maven_Pro',sans-serif] text-[28px] font-bold">18</p>
-                      <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px]">Clientes Satisfeitos</p>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="flex gap-3 p-6 border-t border-slate-200">
+            <div className="flex gap-3">
               <button
                 onClick={fecharModalCurriculo}
-                className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
               >
                 Fechar
               </button>
               <button
                 onClick={exportarCurriculoPDF}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2"
               >
-                <Download size={18} />
-                Exportar PDF
+                <Download size={20} />
+                Baixar PDF
               </button>
             </div>
           </div>

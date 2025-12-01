@@ -12,6 +12,7 @@ import { CriarProjetoPage } from './pages/CriarProjetoPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ProjectsProvider } from './contexts/ProjectsContext';
 
 function AppContent() {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ function AppContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [paginaAnterior, setPaginaAnterior] = useState<string>('home'); // Rastreia a página de origem
   
   // Se não estiver logado, mostra a página de cadastro ou login
   if (!user) {
@@ -44,6 +46,7 @@ function AppContent() {
   }
 
   const handleProjectSelect = (projectId: number) => {
+    setPaginaAnterior(currentPage); // Salva a página atual como origem
     setSelectedProjectId(projectId);
     setCurrentPage('project-detail');
   };
@@ -57,20 +60,37 @@ function AppContent() {
     setCurrentPage('projetos');
   };
 
+  const handleProjetoCriado = (projectId: number) => {
+    // Navega automaticamente para o projeto recém-criado
+    console.log('App - Navegando para projeto ID:', projectId);
+    setPaginaAnterior('criar-projeto'); // Veio da criação de projeto
+    setSelectedProjectId(projectId);
+    setCurrentPage('project-detail');
+  };
+  
+  const handleBackFromProject = () => {
+    setSelectedProjectId(null);
+    setCurrentPage(paginaAnterior); // Volta para a página de origem
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case 'home':
         return <HomePage onProjectSelect={handleProjectSelect} onNovoProjeto={() => setCurrentPage('criar-projeto')} />;
       case 'project-detail':
         return selectedProjectId ? (
-          <ProjectDetailPage projectId={selectedProjectId} onBack={handleBackToHome} />
+          <ProjectDetailPage 
+            projectId={selectedProjectId} 
+            onBack={handleBackFromProject}
+            paginaOrigem={paginaAnterior}
+          />
         ) : (
           <HomePage onProjectSelect={handleProjectSelect} onNovoProjeto={() => setCurrentPage('criar-projeto')} />
         );
       case 'projetos':
         return <ProjetosPage onProjectSelect={handleProjectSelect} onNovoProjeto={() => setCurrentPage('criar-projeto')} />;
       case 'criar-projeto':
-        return <CriarProjetoPage onBack={handleBackToProjetos} onProjetoCriado={handleBackToProjetos} />;
+        return <CriarProjetoPage onBack={handleBackToProjetos} onProjetoCriado={handleProjetoCriado} />;
       case 'perfil':
         return <PerfilPage />;
       case 'suporte':
@@ -102,7 +122,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ProjectsProvider>
+        <AppContent />
+      </ProjectsProvider>
     </AuthProvider>
   );
 }

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Send, Paperclip, Clock, User, MessageCircle, CheckCircle2, MoreVertical, Eye, Plus, X, FileText, Download, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Send, Paperclip, Clock, User, MessageCircle, CheckCircle2, MoreVertical, Eye, Plus, X, FileText, Download, Image as ImageIcon, Link as LinkIcon, Copy, Check, Users, UserPlus, RotateCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useProjects } from '../contexts/ProjectsContext';
 
 interface ProjectDetailPageProps {
   projectId: number;
   onBack: () => void;
+  paginaOrigem?: string;
 }
 
 interface Tarefa {
@@ -14,6 +16,7 @@ interface Tarefa {
   responsavel: string;
   prioridade: string;
   comentarios: number;
+  colunaOrigem?: string;
   anexos?: Array<{
     nome: string;
     tipo: 'imagem' | 'documento';
@@ -37,8 +40,11 @@ interface AtividadeDiaria {
   colunaAnterior?: string;
 }
 
-export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps) {
+export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: ProjectDetailPageProps) {
   const { user, isDesigner, isCliente } = useAuth();
+  const { atualizarProjeto, obterProjetoPorId } = useProjects();
+  
+  console.log('ProjectDetailPage - Página de origem:', paginaOrigem);
   const [mensagem, setMensagem] = useState('');
   const [modalAberto, setModalAberto] = useState(false);
   const [colunaAtual, setColunaAtual] = useState<string | null>(null);
@@ -47,7 +53,16 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
     descricao: '',
     prioridade: 'Média'
   });
-  const [atividadesDoDia, setAtividadesDoDia] = useState<AtividadeDiaria[]>([]);
+  const [atividadesDoDia, setAtividadesDoDia] = useState<AtividadeDiaria[]>(() => {
+    // Carrega atividades salvas do contexto ao inicializar
+    const projetoAtual = obterProjetoPorId(projectId);
+    const atividades = projetoAtual?.atividades || [];
+    // Converte timestamps de string para Date se necessário
+    return atividades.map(ativ => ({
+      ...ativ,
+      timestamp: ativ.timestamp instanceof Date ? ativ.timestamp : new Date(ativ.timestamp)
+    }));
+  });
   const [menuAberto, setMenuAberto] = useState<number | null>(null);
   const [modalEdicao, setModalEdicao] = useState(false);
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | null>(null);
@@ -56,6 +71,8 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
   const [tarefaSelecionada, setTarefaSelecionada] = useState<number | null>(null);
   const [tarefaFiltrada, setTarefaFiltrada] = useState<number | null>(null);
   const [tarefaParaComentar, setTarefaParaComentar] = useState<number | null>(null);
+  const [linkCopiado, setLinkCopiado] = useState(false);
+  const [modalConvite, setModalConvite] = useState(false);
   const chatRef = React.useRef<HTMLDivElement>(null);
   const mensagensRef = React.useRef<HTMLDivElement>(null);
   
@@ -68,116 +85,269 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
     cliente: projectId === 1 ? 'TechCorp Solutions' : 
              projectId === 2 ? 'Fashion Store' :
              projectId === 3 ? 'InovaTech' : 'DataViz Inc',
-    status: 'Em Andamento',
-    progresso: 65
+    status: 'Em Andamento'
+  };
+  
+  // Função para obter o texto do botão voltar baseado na página de origem
+  const obterTextoVoltar = (): string => {
+    const paginas: Record<string, string> = {
+      'home': 'Home',
+      'projetos': 'Projetos',
+      'criar-projeto': 'Criar Projeto',
+      'perfil': 'Perfil',
+      'suporte': 'Suporte',
+      'configuracoes': 'Configurações'
+    };
+    
+    return `Voltar para ${paginas[paginaOrigem] || 'Home'}`;
+  };
+  
+  // Calcular progresso baseado nas tarefas concluídas
+  const calcularProgresso = (): number => {
+    const totalTarefas = colunas.reduce((total, coluna) => total + coluna.tarefas.length, 0);
+    if (totalTarefas === 0) return 0;
+    
+    const tarefasConcluidas = colunas.find(col => col.id === 'concluido')?.tarefas.length || 0;
+    return Math.round((tarefasConcluidas / totalTarefas) * 100);
   };
 
-  const [colunas, setColunas] = useState<Coluna[]>([
-    {
-      id: 'conceituacao',
-      titulo: 'Em Conceituação',
-      cor: 'bg-purple-500',
-      tarefas: [
+  // Função para sincronizar dados do projeto no contexto
+  const sincronizarProjetoNoContexto = (mensagensAtuais?: typeof listaMensagens, atividadesAtuais?: AtividadeDiaria[], colunasAtuais?: Coluna[]) => {
+    const colunasParaCalculo = colunasAtuais || colunas;
+    const totalTarefas = colunasParaCalculo.reduce((total, coluna) => total + coluna.tarefas.length, 0);
+    const tarefasConcluidas = colunasParaCalculo.find(col => col.id === 'concluido')?.tarefas.length || 0;
+    const tarefasEmAndamento = totalTarefas - tarefasConcluidas;
+    
+    // Calcula progresso com as colunas corretas
+    const calcularProgressoAtual = () => {
+      if (totalTarefas === 0) return 0;
+      return Math.round((tarefasConcluidas / totalTarefas) * 100);
+    };
+    const progresso = calcularProgressoAtual();
+    
+    // Conta mensagens novas (do cliente se for designer, do designer se for cliente)
+    const mensagens = mensagensAtuais || listaMensagens;
+    const mensagensDoOutro = mensagens.filter(msg => 
+      isDesigner ? msg.autor === 'cliente' : msg.autor === 'designer'
+    ).length;
+    
+    // Calcula dias restantes baseado na data de entrega
+    const projetoAtual = obterProjetoPorId(projectId);
+    let diasRestantes = 0;
+    if (projetoAtual?.dataEntrega) {
+      const hoje = new Date();
+      const dataEntrega = new Date(projetoAtual.dataEntrega);
+      const diffTime = dataEntrega.getTime() - hoje.getTime();
+      diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+    
+    // Formata timestamp para exibição amigável
+    const agora = new Date();
+    const ultimaAtualizacao = 'Agora';
+    
+    // Usa as atividades passadas como parâmetro ou as atuais do estado
+    const atividades = atividadesAtuais || atividadesDoDia;
+    
+    console.log('ProjectDetailPage - Sincronizando projeto:', {
+      totalTarefas,
+      tarefasConcluidas,
+      progresso,
+      colunasCount: colunasParaCalculo.length,
+      mensagensCount: mensagens.length
+    });
+    
+    atualizarProjeto(projectId, {
+      tarefas: {
+        total: totalTarefas,
+        concluidas: tarefasConcluidas,
+        emAndamento: tarefasEmAndamento
+      },
+      progresso,
+      ultimaAtualizacao,
+      mensagensNovas: mensagensDoOutro,
+      diasRestantes,
+      atividades,
+      colunas: colunasParaCalculo,
+      mensagens: mensagens
+    });
+  };
+
+  // Função para obter colunas iniciais baseado no tipo de projeto
+  const obterColunasIniciais = (): Coluna[] => {
+    // Primeiro tenta carregar as colunas salvas no contexto
+    const projetoAtual = obterProjetoPorId(projectId);
+    if (projetoAtual?.colunas && projetoAtual.colunas.length > 0) {
+      console.log('ProjectDetailPage - Carregando colunas salvas do contexto');
+      return projetoAtual.colunas;
+    }
+    
+    // Projetos demo (1-4) só mostram tarefas se for usuário demo
+    const isUsuarioDemo = user?.email === 'designer@designflow.com' || user?.email === 'cliente@empresa.com';
+    const isProjetoDemo = isUsuarioDemo && projectId >= 1 && projectId <= 4;
+    console.log('ProjectDetailPage - projectId:', projectId, 'isUsuarioDemo:', isUsuarioDemo, 'isProjetoDemo:', isProjetoDemo);
+    
+    if (isProjetoDemo) {
+      // Retorna colunas com tarefas demo
+      return [
         {
-          id: 1,
-          titulo: 'Pesquisa de Referências',
-          descricao: 'Coletar inspirações e criar moodboard',
-          responsavel: 'Designer',
-          prioridade: 'Alta',
-          comentarios: 3,
-          anexos: [
-            { nome: 'moodboard-v1.png', tipo: 'imagem', url: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=400' },
-            { nome: 'referencias.pdf', tipo: 'documento', url: '#' }
+          id: 'conceituacao',
+          titulo: 'Em Conceituação',
+          cor: 'bg-purple-500',
+          tarefas: [
+            {
+              id: 1,
+              titulo: 'Pesquisa de Referências',
+              descricao: 'Coletar inspirações e criar moodboard',
+              responsavel: 'Designer',
+              prioridade: 'Alta',
+              comentarios: 3,
+              anexos: [
+                { nome: 'moodboard-v1.png', tipo: 'imagem', url: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=400' },
+                { nome: 'referencias.pdf', tipo: 'documento', url: '#' }
+              ]
+            },
+            {
+              id: 2,
+              titulo: 'Definir Paleta de Cores',
+              descricao: 'Escolher cores principais e secundárias',
+              responsavel: 'Designer',
+              prioridade: 'Média',
+              comentarios: 1
+            }
           ]
         },
         {
-          id: 2,
-          titulo: 'Definir Paleta de Cores',
-          descricao: 'Escolher cores principais e secundárias',
-          responsavel: 'Designer',
-          prioridade: 'Média',
-          comentarios: 1
-        }
-      ]
-    },
-    {
-      id: 'andamento',
-      titulo: 'Design em Andamento',
-      cor: 'bg-blue-500',
-      tarefas: [
-        {
-          id: 3,
-          titulo: 'Wireframes Homepage',
-          descricao: 'Criar estrutura básica da página inicial',
-          responsavel: 'Designer',
-          prioridade: 'Alta',
-          comentarios: 5
+          id: 'andamento',
+          titulo: 'Design em Andamento',
+          cor: 'bg-blue-500',
+          tarefas: [
+            {
+              id: 3,
+              titulo: 'Wireframes Homepage',
+              descricao: 'Criar estrutura básica da página inicial',
+              responsavel: 'Designer',
+              prioridade: 'Alta',
+              comentarios: 5
+            },
+            {
+              id: 4,
+              titulo: 'Design Sistema',
+              descricao: 'Componentes e tokens de design',
+              responsavel: 'Designer',
+              prioridade: 'Alta',
+              comentarios: 2
+            },
+            {
+              id: 5,
+              titulo: 'Protótipo Interativo',
+              descricao: 'Criar fluxo de navegação',
+              responsavel: 'Designer',
+              prioridade: 'Média',
+              comentarios: 0
+            }
+          ]
         },
         {
-          id: 4,
-          titulo: 'Design Sistema',
-          descricao: 'Componentes e tokens de design',
-          responsavel: 'Designer',
-          prioridade: 'Alta',
-          comentarios: 2
+          id: 'revisao',
+          titulo: 'Revisão do Cliente',
+          cor: 'bg-orange-500',
+          tarefas: [
+            {
+              id: 6,
+              titulo: 'Layout da Página Sobre',
+              descricao: 'Aguardando feedback sobre estrutura',
+              responsavel: 'Cliente',
+              prioridade: 'Alta',
+              comentarios: 8
+            },
+            {
+              id: 7,
+              titulo: 'Iconografia',
+              descricao: 'Revisão do conjunto de ícones',
+              responsavel: 'Cliente',
+              prioridade: 'Baixa',
+              comentarios: 2
+            }
+          ]
         },
         {
-          id: 5,
-          titulo: 'Protótipo Interativo',
-          descricao: 'Criar fluxo de navegação',
-          responsavel: 'Designer',
-          prioridade: 'Média',
-          comentarios: 0
+          id: 'concluido',
+          titulo: 'Concluído',
+          cor: 'bg-green-500',
+          tarefas: [
+            {
+              id: 8,
+              titulo: 'Logo Principal',
+              descricao: 'Versões aprovadas pelo cliente',
+              responsavel: 'Designer',
+              prioridade: 'Alta',
+              comentarios: 12
+            },
+            {
+              id: 9,
+              titulo: 'Tipografia',
+              descricao: 'Fontes definidas e aprovadas',
+              responsavel: 'Designer',
+              prioridade: 'Média',
+              comentarios: 4
+            }
+          ]
         }
-      ]
-    },
-    {
-      id: 'revisao',
-      titulo: 'Revisão do Cliente',
-      cor: 'bg-orange-500',
-      tarefas: [
+      ];
+    } else {
+      // Projetos novos começam com colunas vazias
+      return [
         {
-          id: 6,
-          titulo: 'Layout da Página Sobre',
-          descricao: 'Aguardando feedback sobre estrutura',
-          responsavel: 'Cliente',
-          prioridade: 'Alta',
-          comentarios: 8
+          id: 'conceituacao',
+          titulo: 'Em Conceituação',
+          cor: 'bg-purple-500',
+          tarefas: []
         },
         {
-          id: 7,
-          titulo: 'Iconografia',
-          descricao: 'Revisão do conjunto de ícones',
-          responsavel: 'Cliente',
-          prioridade: 'Baixa',
-          comentarios: 2
-        }
-      ]
-    },
-    {
-      id: 'concluido',
-      titulo: 'Concluído',
-      cor: 'bg-green-500',
-      tarefas: [
-        {
-          id: 8,
-          titulo: 'Logo Principal',
-          descricao: 'Versões aprovadas pelo cliente',
-          responsavel: 'Designer',
-          prioridade: 'Alta',
-          comentarios: 12
+          id: 'andamento',
+          titulo: 'Design em Andamento',
+          cor: 'bg-blue-500',
+          tarefas: []
         },
         {
-          id: 9,
-          titulo: 'Tipografia',
-          descricao: 'Fontes definidas e aprovadas',
-          responsavel: 'Designer',
-          prioridade: 'Média',
-          comentarios: 4
+          id: 'revisao',
+          titulo: 'Revisão do Cliente',
+          cor: 'bg-orange-500',
+          tarefas: []
+        },
+        {
+          id: 'concluido',
+          titulo: 'Concluído',
+          cor: 'bg-green-500',
+          tarefas: []
         }
-      ]
+      ];
     }
-  ]);
+  };
+
+  const [colunas, setColunas] = useState<Coluna[]>(obterColunasIniciais());
+
+  // Reseta as colunas quando o projectId mudar
+  useEffect(() => {
+    console.log('ProjectDetailPage - Mudando para projeto ID:', projectId);
+    const colunasCarregadas = obterColunasIniciais();
+    const mensagensCarregadas = obterMensagensIniciais();
+    console.log('ProjectDetailPage - Colunas carregadas:', colunasCarregadas.length, 'colunas');
+    console.log('ProjectDetailPage - Mensagens carregadas:', mensagensCarregadas.length, 'mensagens');
+    
+    setColunas(colunasCarregadas);
+    setListaMensagens(mensagensCarregadas);
+    
+    // Carrega as atividades do contexto ao mudar de projeto
+    const projetoAtual = obterProjetoPorId(projectId);
+    const atividades = projetoAtual?.atividades || [];
+    // Converte timestamps de string para Date se necessário
+    const atividadesConvertidas = atividades.map(ativ => ({
+      ...ativ,
+      timestamp: ativ.timestamp instanceof Date ? ativ.timestamp : new Date(ativ.timestamp)
+    }));
+    setAtividadesDoDia(atividadesConvertidas);
+  }, [projectId]);
 
   const abrirModal = (colunaId: string) => {
     setColunaAtual(colunaId);
@@ -197,9 +367,11 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
   const adicionarTarefa = () => {
     if (!novaTarefa.titulo.trim() || !colunaAtual) return;
 
-    const novoId = Math.max(...colunas.flatMap(c => c.tarefas.map(t => t.id))) + 1;
+    // Calcula o próximo ID, tratando o caso de não haver tarefas ainda
+    const todosIds = colunas.flatMap(c => c.tarefas.map(t => t.id));
+    const novoId = todosIds.length > 0 ? Math.max(...todosIds) + 1 : 1;
     
-    setColunas(colunas.map(coluna => {
+    const colunasAtualizadas = colunas.map(coluna => {
       if (coluna.id === colunaAtual) {
         // Processar anexos da tarefa
         const anexosTarefa = arquivosTarefa.map(file => ({
@@ -225,22 +397,28 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
         };
       }
       return coluna;
-    }));
+    });
+    
+    setColunas(colunasAtualizadas);
 
     // Registrar atividade do dia
-    setAtividadesDoDia([
+    const novasAtividades = [
       ...atividadesDoDia,
       {
-        tipo: 'tarefa_criada',
+        tipo: 'tarefa_criada' as const,
         tarefa: novaTarefa.titulo,
         coluna: colunas.find(c => c.id === colunaAtual)?.titulo || '',
         timestamp: new Date(),
         prioridade: novaTarefa.prioridade
       }
-    ]);
+    ];
+    setAtividadesDoDia(novasAtividades);
 
     setArquivosTarefa([]);
     fecharModal();
+    
+    // Sincroniza mudanças no contexto com as colunas e atividades atualizadas
+    sincronizarProjetoNoContexto(undefined, novasAtividades, colunasAtualizadas);
   };
 
   const abrirMenuTarefa = (id: number) => {
@@ -274,7 +452,7 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
       ...novosAnexos
     ];
 
-    setColunas(colunas.map(coluna => ({
+    const colunasAtualizadas = colunas.map(coluna => ({
       ...coluna,
       tarefas: coluna.tarefas.map(t => 
         t.id === tarefaEditando.id ? {
@@ -282,10 +460,15 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
           anexos: anexosCombinados.length > 0 ? anexosCombinados : undefined
         } : t
       )
-    })));
+    }));
+    
+    setColunas(colunasAtualizadas);
 
     setArquivosTarefa([]);
     fecharEdicao();
+    
+    // Sincroniza mudanças no contexto com as colunas atualizadas
+    sincronizarProjetoNoContexto(undefined, undefined, colunasAtualizadas);
   };
 
   const abrirExclusao = (tarefaId: number, colunaId: string) => {
@@ -302,12 +485,178 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
   const confirmarExclusao = () => {
     if (!tarefaParaExcluir) return;
 
-    setColunas(colunas.map(coluna => ({
+    const colunasAtualizadas = colunas.map(coluna => ({
       ...coluna,
       tarefas: coluna.tarefas.filter(t => t.id !== tarefaParaExcluir.id)
-    })));
+    }));
+    
+    setColunas(colunasAtualizadas);
 
     fecharExclusao();
+    
+    // Sincroniza mudanças no contexto com as colunas atualizadas
+    sincronizarProjetoNoContexto(undefined, undefined, colunasAtualizadas);
+  };
+  
+  // Função para concluir tarefa
+  const concluirTarefa = (tarefaId: number, colunaOrigemId: string) => {
+    // Encontra a tarefa na coluna de origem
+    const colunaOrigem = colunas.find(col => col.id === colunaOrigemId);
+    const tarefa = colunaOrigem?.tarefas.find(t => t.id === tarefaId);
+    
+    if (!tarefa) return;
+    
+    // Salva a coluna de origem na tarefa
+    const tarefaComOrigem = { ...tarefa, colunaOrigem: colunaOrigemId };
+    
+    // Move a tarefa para a coluna "Concluído"
+    const colunasAtualizadas = colunas.map(coluna => {
+      if (coluna.id === colunaOrigemId) {
+        // Remove da coluna de origem
+        return {
+          ...coluna,
+          tarefas: coluna.tarefas.filter(t => t.id !== tarefaId)
+        };
+      } else if (coluna.id === 'concluido') {
+        // Adiciona na coluna de concluídos com a origem salva
+        return {
+          ...coluna,
+          tarefas: [...coluna.tarefas, tarefaComOrigem]
+        };
+      }
+      return coluna;
+    });
+    
+    setColunas(colunasAtualizadas);
+    
+    setMenuAberto(null);
+    
+    // Registra na atividade do dia
+    const novaAtividade: AtividadeDiaria = {
+      tipo: 'status_alterado',
+      tarefa: tarefa.titulo,
+      coluna: 'Concluído',
+      colunaAnterior: colunaOrigem?.titulo,
+      timestamp: new Date(),
+      prioridade: tarefa.prioridade
+    };
+    const novasAtividades = [novaAtividade, ...atividadesDoDia];
+    setAtividadesDoDia(novasAtividades);
+    
+    // Sincroniza mudanças no contexto com as colunas e atividades atualizadas
+    sincronizarProjetoNoContexto(undefined, novasAtividades, colunasAtualizadas);
+  };
+
+  // Função para retornar tarefa concluída ou em revisão para coluna original
+  const retornarTarefa = (tarefaId: number) => {
+    // Encontra a tarefa em qualquer coluna (concluído ou revisão)
+    let tarefa: Tarefa | undefined;
+    let colunaAtualId: string | undefined;
+    
+    for (const coluna of colunas) {
+      const tarefaEncontrada = coluna.tarefas.find(t => t.id === tarefaId);
+      if (tarefaEncontrada) {
+        tarefa = tarefaEncontrada;
+        colunaAtualId = coluna.id;
+        break;
+      }
+    }
+    
+    if (!tarefa || !tarefa.colunaOrigem || !colunaAtualId) return;
+    
+    const colunaDestinoId = tarefa.colunaOrigem;
+    const colunaDestino = colunas.find(col => col.id === colunaDestinoId);
+    const colunaAtual = colunas.find(col => col.id === colunaAtualId);
+    
+    // Remove a informação de origem ao retornar
+    const tarefaSemOrigem = { ...tarefa };
+    delete tarefaSemOrigem.colunaOrigem;
+    
+    // Move a tarefa de volta para a coluna original
+    const colunasAtualizadas = colunas.map(coluna => {
+      if (coluna.id === colunaAtualId) {
+        // Remove da coluna atual (concluído ou revisão)
+        return {
+          ...coluna,
+          tarefas: coluna.tarefas.filter(t => t.id !== tarefaId)
+        };
+      } else if (coluna.id === colunaDestinoId) {
+        // Adiciona de volta na coluna original
+        return {
+          ...coluna,
+          tarefas: [...coluna.tarefas, tarefaSemOrigem]
+        };
+      }
+      return coluna;
+    });
+    
+    setColunas(colunasAtualizadas);
+    
+    setMenuAberto(null);
+    
+    // Registra na atividade do dia
+    const novaAtividade: AtividadeDiaria = {
+      tipo: 'status_alterado',
+      tarefa: tarefa.titulo,
+      coluna: colunaDestino?.titulo || '',
+      colunaAnterior: colunaAtual?.titulo || '',
+      timestamp: new Date(),
+      prioridade: tarefa.prioridade
+    };
+    const novasAtividades = [novaAtividade, ...atividadesDoDia];
+    setAtividadesDoDia(novasAtividades);
+    
+    // Sincroniza mudanças no contexto com as colunas e atividades atualizadas
+    sincronizarProjetoNoContexto(undefined, novasAtividades, colunasAtualizadas);
+  };
+
+  // Função para enviar tarefa para revisão do cliente
+  const enviarParaRevisao = (tarefaId: number, colunaOrigemId: string) => {
+    // Encontra a tarefa na coluna de origem
+    const colunaOrigem = colunas.find(col => col.id === colunaOrigemId);
+    const tarefa = colunaOrigem?.tarefas.find(t => t.id === tarefaId);
+    
+    if (!tarefa) return;
+    
+    // Salva a coluna de origem na tarefa
+    const tarefaComOrigem = { ...tarefa, colunaOrigem: colunaOrigemId };
+    
+    // Move a tarefa para a coluna "Revisão do Cliente"
+    const colunasAtualizadas = colunas.map(coluna => {
+      if (coluna.id === colunaOrigemId) {
+        // Remove da coluna de origem
+        return {
+          ...coluna,
+          tarefas: coluna.tarefas.filter(t => t.id !== tarefaId)
+        };
+      } else if (coluna.id === 'revisao') {
+        // Adiciona na coluna de revisão com a origem salva
+        return {
+          ...coluna,
+          tarefas: [...coluna.tarefas, tarefaComOrigem]
+        };
+      }
+      return coluna;
+    });
+    
+    setColunas(colunasAtualizadas);
+    
+    setMenuAberto(null);
+    
+    // Registra na atividade do dia
+    const novaAtividade: AtividadeDiaria = {
+      tipo: 'status_alterado',
+      tarefa: tarefa.titulo,
+      coluna: 'Revisão do Cliente',
+      colunaAnterior: colunaOrigem?.titulo,
+      timestamp: new Date(),
+      prioridade: tarefa.prioridade
+    };
+    const novasAtividades = [novaAtividade, ...atividadesDoDia];
+    setAtividadesDoDia(novasAtividades);
+    
+    // Sincroniza mudanças no contexto com as colunas e atividades atualizadas
+    sincronizarProjetoNoContexto(undefined, novasAtividades, colunasAtualizadas);
   };
 
   const [arquivosSelecionados, setArquivosSelecionados] = useState<File[]>([]);
@@ -335,7 +684,21 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
     setArquivosTarefa(prev => prev.filter((_, i) => i !== index));
   };
 
-  const [listaMensagens, setListaMensagens] = useState([
+  // Função para obter mensagens iniciais baseado no tipo de projeto
+  const obterMensagensIniciais = () => {
+    // Primeiro tenta carregar as mensagens salvas no contexto
+    const projetoAtual = obterProjetoPorId(projectId);
+    if (projetoAtual?.mensagens && projetoAtual.mensagens.length > 0) {
+      console.log('ProjectDetailPage - Carregando mensagens salvas do contexto');
+      return projetoAtual.mensagens;
+    }
+    
+    // Projetos demo (1-4) só mostram mensagens se for usuário demo
+    const isUsuarioDemo = user?.email === 'designer@designflow.com' || user?.email === 'cliente@empresa.com';
+    const isProjetoDemo = isUsuarioDemo && projectId >= 1 && projectId <= 4;
+    
+    if (isProjetoDemo) {
+      return [
     {
       id: 1,
       autor: 'designer',
@@ -460,7 +823,14 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
       avatar: 'CM',
       tarefaId: 2
     }
-  ]);
+      ];
+    } else {
+      // Projetos novos começam sem mensagens
+      return [];
+    }
+  };
+
+  const [listaMensagens, setListaMensagens] = useState(obterMensagensIniciais());
 
   const prioridadeClasses = {
     Alta: 'bg-red-100 text-red-700 border-red-200',
@@ -499,8 +869,11 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
 
     // Adicionar relatório ao chat
     const novaHora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const todosIdsMensagens = listaMensagens.map(m => m.id);
+    const novoIdRelatorio = todosIdsMensagens.length > 0 ? Math.max(...todosIdsMensagens) + 1 : 1;
+    
     const novoRelatorio = {
-      id: listaMensagens.length + 1,
+      id: novoIdRelatorio,
       autor: 'designer',
       nome: user?.nome || 'Designer',
       mensagem: relatorio,
@@ -548,8 +921,12 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
         url: URL.createObjectURL(file) // Em produção, fazer upload real
       }));
       
+      // Calcula o próximo ID, tratando o caso de não haver mensagens ainda
+      const todosIdsMensagens = listaMensagens.map(m => m.id);
+      const novoIdMensagem = todosIdsMensagens.length > 0 ? Math.max(...todosIdsMensagens) + 1 : 1;
+      
       const novaMensagem = {
-        id: listaMensagens.length + 1,
+        id: novoIdMensagem,
         autor: isDesigner ? 'designer' : 'cliente',
         nome: user?.nome || (isDesigner ? 'Designer' : 'Cliente'),
         mensagem: mensagem,
@@ -558,10 +935,14 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
         tarefaId: tarefaParaComentar || undefined,
         anexos: anexos.length > 0 ? anexos : undefined
       };
-      setListaMensagens([...listaMensagens, novaMensagem]);
+      const mensagensAtualizadas = [...listaMensagens, novaMensagem];
+      setListaMensagens(mensagensAtualizadas);
       setMensagem('');
       setArquivosSelecionados([]);
       // Não limpa a tarefa selecionada para permitir múltiplos comentários na mesma tarefa
+      
+      // Sincroniza mudanças no contexto com as mensagens atualizadas
+      sincronizarProjetoNoContexto(mensagensAtualizadas);
     }
   };
   
@@ -595,6 +976,21 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
     return tarefas;
   };
 
+  // Gerar link de convite único para o projeto
+  const gerarLinkConvite = () => {
+    // Em produção, este seria um token único gerado pelo backend
+    const tokenUnico = `${projectId}-${Math.random().toString(36).substring(2, 15)}`;
+    return `${window.location.origin}/convite/${tokenUnico}`;
+  };
+
+  const copiarLinkConvite = () => {
+    const link = gerarLinkConvite();
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopiado(true);
+      setTimeout(() => setLinkCopiado(false), 2000);
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-4 md:py-8 px-4 md:px-6 lg:px-8">
       <div className="max-w-[1800px] mx-auto">
@@ -605,7 +1001,7 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
             className="flex items-center gap-2 text-slate-600 hover:text-slate-800 mb-4 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-medium"
           >
             <ArrowLeft size={20} />
-            Voltar para Home
+            {obterTextoVoltar()}
           </button>
           
           <div className="bg-white rounded-2xl p-4 md:p-6 shadow-lg">
@@ -632,7 +1028,7 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
                     Progresso Geral
                   </p>
                   <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[20px] md:text-[24px] font-bold leading-[28px]">
-                    {projeto.progresso}%
+                    {calcularProgresso()}%
                   </p>
                 </div>
                 <span className="bg-blue-100 text-blue-700 px-3 md:px-4 py-1.5 md:py-2 rounded-full font-['Kumbh_Sans',sans-serif] text-[12px] md:text-[14px] font-semibold leading-[16px] whitespace-nowrap">
@@ -640,6 +1036,19 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
                 </span>
               </div>
             </div>
+            
+            {/* Botão de Convite - Apenas para Designers */}
+            {isDesigner && (
+              <div className="mt-4">
+                <button
+                  onClick={() => setModalConvite(true)}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2.5 rounded-xl hover:shadow-lg transition-all duration-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold inline-flex items-center gap-2 hover:-translate-y-0.5"
+                >
+                  <UserPlus size={18} />
+                  Convidar Cliente
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -689,7 +1098,43 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
                                       className="fixed inset-0 z-10" 
                                       onClick={() => setMenuAberto(null)}
                                     />
-                                    <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-lg shadow-lg py-1 w-40 z-20">
+                                    <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-lg shadow-lg py-1 w-48 z-20 animate-fadeIn">
+                                      {coluna.id !== 'concluido' && coluna.id !== 'revisao' && (
+                                        <button
+                                          onClick={() => enviarParaRevisao(tarefa.id, coluna.id)}
+                                          className="w-full text-left px-4 py-2 hover:bg-orange-50 text-orange-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] flex items-center gap-2"
+                                        >
+                                          <Eye size={16} />
+                                          Enviar para Revisão
+                                        </button>
+                                      )}
+                                      {coluna.id === 'revisao' && (
+                                        <button
+                                          onClick={() => concluirTarefa(tarefa.id, coluna.id)}
+                                          className="w-full text-left px-4 py-2 hover:bg-green-50 text-green-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] flex items-center gap-2"
+                                        >
+                                          <CheckCircle2 size={16} />
+                                          Concluir Tarefa
+                                        </button>
+                                      )}
+                                      {coluna.id === 'concluido' && tarefa.colunaOrigem && (
+                                        <button
+                                          onClick={() => retornarTarefa(tarefa.id)}
+                                          className="w-full text-left px-4 py-2 hover:bg-blue-50 text-blue-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] flex items-center gap-2"
+                                        >
+                                          <RotateCcw size={16} />
+                                          Retornar Tarefa
+                                        </button>
+                                      )}
+                                      {coluna.id === 'revisao' && tarefa.colunaOrigem && (
+                                        <button
+                                          onClick={() => retornarTarefa(tarefa.id)}
+                                          className="w-full text-left px-4 py-2 hover:bg-blue-50 text-blue-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] flex items-center gap-2"
+                                        >
+                                          <RotateCcw size={16} />
+                                          Retornar Tarefa
+                                        </button>
+                                      )}
                                       <button
                                         onClick={() => abrirEdicao(tarefa, coluna.id)}
                                         className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px] flex items-center gap-2"
@@ -1442,6 +1887,125 @@ export function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps)
               >
                 Excluir Tarefa
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Convite para Cliente */}
+      {modalConvite && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl flex items-center justify-center">
+                  <UserPlus size={24} className="text-indigo-600" />
+                </div>
+                <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[24px] font-bold leading-[28px]">
+                  Convidar Cliente
+                </h3>
+              </div>
+              <button
+                onClick={() => setModalConvite(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Informações do Projeto */}
+              <div className="bg-slate-50 rounded-xl p-4">
+                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium leading-[18px] mb-2">
+                  Projeto:
+                </p>
+                <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
+                  {projeto.nome}
+                </p>
+                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px] mt-1">
+                  Cliente: {projeto.cliente}
+                </p>
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <p className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[15px] font-normal leading-[22px]">
+                  Compartilhe este link de convite com seu cliente para que ele possa acompanhar o progresso do projeto em tempo real.
+                </p>
+              </div>
+
+              {/* Link de Convite */}
+              <div className="space-y-3">
+                <label className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px]">
+                  Link de Convite:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={gerarLinkConvite()}
+                    readOnly
+                    className="flex-1 bg-slate-100 border border-slate-300 rounded-xl px-4 py-3 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal text-slate-700"
+                  />
+                  <button
+                    onClick={copiarLinkConvite}
+                    className={`px-6 py-3 rounded-xl transition-all duration-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center gap-2 ${
+                      linkCopiado
+                        ? 'bg-green-500 text-white'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    }`}
+                  >
+                    {linkCopiado ? (
+                      <>
+                        <Check size={18} />
+                        Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={18} />
+                        Copiar
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Informações sobre o convite */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex gap-3">
+                  <Users size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-blue-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px] mb-1">
+                      O que o cliente pode fazer:
+                    </p>
+                    <ul className="text-blue-700 font-['Kumbh_Sans',sans-serif] text-[13px] font-normal leading-[20px] space-y-1">
+                      <li>✓ Visualizar o quadro Kanban e todas as tarefas</li>
+                      <li>✓ Participar do chat e enviar mensagens</li>
+                      <li>✓ Acompanhar o progresso do projeto em tempo real</li>
+                      <li>✓ Comentar e dar feedback sobre as tarefas</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botões de ação */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setModalConvite(false)}
+                  className="flex-1 px-6 py-3 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={() => {
+                    copiarLinkConvite();
+                    // Em produção, poderia enviar email automaticamente
+                  }}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2"
+                >
+                  <LinkIcon size={18} />
+                  Copiar e Compartilhar
+                </button>
+              </div>
             </div>
           </div>
         </div>

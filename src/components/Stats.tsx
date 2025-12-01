@@ -1,38 +1,64 @@
 import React from 'react';
 import { Clock, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
-
-const stats = [
-  {
-    icon: Clock,
-    label: 'Projetos em Andamento',
-    value: '3',
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-100'
-  },
-  {
-    icon: AlertCircle,
-    label: 'Aguardando Feedback',
-    value: '1',
-    color: 'text-yellow-600',
-    bgColor: 'bg-yellow-100'
-  },
-  {
-    icon: CheckCircle,
-    label: 'Feito Hoje',
-    value: '2',
-    color: 'text-green-600',
-    bgColor: 'bg-green-100'
-  },
-  {
-    icon: TrendingUp,
-    label: 'Progresso Geral',
-    value: '52%',
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-100'
-  }
-];
+import { useProjects } from '../contexts/ProjectsContext';
 
 export function Stats() {
+  const { projetos } = useProjects();
+  
+  // Garante que projetos é sempre um array
+  const projetosArray = projetos || [];
+  
+  // Calcula estatísticas reais dos projetos
+  const projetosEmAndamento = projetosArray.filter(p => p.status === 'Em Andamento').length;
+  const aguardandoFeedback = projetosArray.filter(p => p.status === 'Revisão').length;
+  
+  // Calcula tarefas concluídas hoje baseado nas atividades
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const feitoHoje = projetosArray.reduce((total, projeto) => {
+    if (projeto.atividades) {
+      const atividadesHoje = projeto.atividades.filter(
+        ativ => ativ.data === hoje && ativ.tipo === 'conclusao'
+      );
+      return total + atividadesHoje.length;
+    }
+    return total;
+  }, 0);
+  
+  const progressoGeral = projetosArray.length > 0 
+    ? Math.round(projetosArray.reduce((acc, p) => acc + p.progresso, 0) / projetosArray.length) 
+    : 0;
+  
+  const stats = [
+    {
+      icon: Clock,
+      label: 'Projetos em Andamento',
+      value: projetosEmAndamento.toString(),
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100'
+    },
+    {
+      icon: AlertCircle,
+      label: 'Aguardando Feedback',
+      value: aguardandoFeedback.toString(),
+      color: 'text-yellow-600',
+      bgColor: 'bg-yellow-100'
+    },
+    {
+      icon: CheckCircle,
+      label: 'Feito Hoje',
+      value: feitoHoje.toString(),
+      color: 'text-green-600',
+      bgColor: 'bg-green-100'
+    },
+    {
+      icon: TrendingUp,
+      label: 'Progresso Geral',
+      value: `${progressoGeral}%`,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100'
+    }
+  ];
+
   return (
     <div className="mx-auto relative">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Calendar, User, FileText, Tag, AlertCircle } from 'lucide-react';
+import { useProjects } from '../contexts/ProjectsContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CriarProjetoPageProps {
   onBack: () => void;
-  onProjetoCriado?: () => void;
+  onProjetoCriado?: (projectId: number) => void;
 }
 
 export function CriarProjetoPage({ onBack, onProjetoCriado }: CriarProjetoPageProps) {
+  const { adicionarProjeto } = useProjects();
+  const { user } = useAuth();
   const [formulario, setFormulario] = useState({
     nome: '',
     cliente: '',
@@ -19,6 +23,9 @@ export function CriarProjetoPage({ onBack, onProjetoCriado }: CriarProjetoPagePr
 
   const [erros, setErros] = useState<{[key: string]: string}>({});
   const [enviando, setEnviando] = useState(false);
+  
+  // Data mínima para o prazo (hoje)
+  const dataMinima = new Date().toISOString().split('T')[0];
 
   const validarFormulario = () => {
     const novosErros: {[key: string]: string} = {};
@@ -58,12 +65,69 @@ export function CriarProjetoPage({ onBack, onProjetoCriado }: CriarProjetoPagePr
 
     // Simulação de envio - em produção seria uma chamada à API
     setTimeout(() => {
+      // Calcular dias restantes
+      const hoje = new Date();
+      const dataEntrega = new Date(formulario.prazo);
+      const diasRestantes = Math.ceil((dataEntrega.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Adicionar o projeto ao contexto
+      const novoProjetoId = adicionarProjeto({
+        nome: formulario.nome,
+        cliente: formulario.cliente,
+        descricao: formulario.descricao,
+        dataInicio: new Date().toISOString().split('T')[0],
+        dataEntrega: formulario.prazo,
+        status: 'Em Andamento',
+        progresso: 0,
+        cor: '#007bff',
+        criadoPor: user?.email || 'designer',
+        tarefas: {
+          concluidas: 0,
+          emAndamento: 0,
+          total: 0
+        },
+        diasRestantes: diasRestantes > 0 ? diasRestantes : 0,
+        mensagensNovas: 0,
+        ultimaAtualizacao: 'Agora',
+        // Inicializa colunas vazias para o Kanban
+        colunas: [
+          {
+            id: 'conceituacao',
+            titulo: 'Em Conceituação',
+            cor: 'bg-purple-500',
+            tarefas: []
+          },
+          {
+            id: 'andamento',
+            titulo: 'Design em Andamento',
+            cor: 'bg-blue-500',
+            tarefas: []
+          },
+          {
+            id: 'revisao',
+            titulo: 'Revisão do Cliente',
+            cor: 'bg-orange-500',
+            tarefas: []
+          },
+          {
+            id: 'concluido',
+            titulo: 'Concluído',
+            cor: 'bg-green-500',
+            tarefas: []
+          }
+        ],
+        // Inicializa mensagens vazias
+        mensagens: [],
+        atividades: []
+      });
+
       console.log('Projeto criado:', formulario);
+      console.log('CriarProjetoPage - ID do novo projeto:', novoProjetoId);
       setEnviando(false);
       
       // Callback de sucesso
       if (onProjetoCriado) {
-        onProjetoCriado();
+        onProjetoCriado(novoProjetoId);
       }
       
       // Volta para a página anterior
@@ -244,6 +308,7 @@ export function CriarProjetoPage({ onBack, onProjetoCriado }: CriarProjetoPagePr
                       className={`w-full pl-11 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[15px] transition-all ${
                         erros.prazo ? 'border-red-500 bg-red-50' : 'border-slate-300 bg-white'
                       }`}
+                      min={dataMinima}
                     />
                   </div>
                   {erros.prazo && (
