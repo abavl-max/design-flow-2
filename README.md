@@ -3,7 +3,7 @@
 
   This is a code bundle for Project Tracking Dashboard. The original project is available at https://www.figma.com/design/z9A9s2fGbnSjKIiSwMJu3z/Project-Tracking-Dashboard.
 
-  ## Running the code
+  ## Running the code 2
 
   Run `npm i` to install the dependencies.
 
