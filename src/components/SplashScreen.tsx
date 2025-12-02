@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 //import logo from 'figma:asset/c6b3d718af7822b20752d7f9484ce8abffe356d6.png';
-import logo from '@/assets/Logo-Light.png';
+import logo from '@/assets/Logo-Dark.png';
 
 interface SplashScreenProps {
   onComplete: () => void;
