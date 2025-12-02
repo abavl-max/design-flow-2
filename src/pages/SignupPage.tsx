@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Mail, Lock, Briefcase, Building, Phone, AlertCircle, Check, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 //import logo from 'figma:asset/257f4f782f48d7780818bcd4c6bcd14b3b926192.png';
-import logo from '@/assets/Logo-Light.jpeg';
+import logo from '@/assets/Logo-Light.png';
 
 interface SignupPageProps {
   onSignupSuccess: () => void;
