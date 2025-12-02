@@ -1,7 +1,7 @@
 import React from 'react';
 import { Sparkles, CheckCircle2 } from 'lucide-react';
 //import logo from 'figma:asset/c6b3d718af7822b20752d7f9484ce8abffe356d6.png';
-import logo from '@/assets/Logo-Light.jpeg';
+import logo from '@/assets/Logo-Light.png';
 
 export function Hero() {
   return (
