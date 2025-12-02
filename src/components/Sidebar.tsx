@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Home, FolderKanban, User, Settings, HelpCircle, ChevronRight, X, LogOut, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import logo from 'figma:asset/257f4f782f48d7780818bcd4c6bcd14b3b926192.png';
+import logoDark from 'figma:asset/c6b3d718af7822b20752d7f9484ce8abffe356d6.png';
 
 interface SidebarProps {
   currentPage: string;
@@ -52,25 +54,28 @@ export function Sidebar({ currentPage, onNavigate, isOpen, onClose }: SidebarPro
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 right-0 w-72 bg-white border-l border-slate-200 flex flex-col h-screen z-50
+        fixed top-0 right-0 w-72 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col h-screen z-50
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
         {/* Logo */}
-        <div className="p-6 border-b border-slate-200">
+        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-['Maven_Pro',sans-serif] text-[20px] font-bold leading-[24px]">DF</span>
-              </div>
-              <div>
-                <h2 className="text-slate-800 font-['Maven_Pro',sans-serif] text-[20px] font-bold leading-[24px]">DesignFlow</h2>
-                <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px]">Gestão de Design</p>
-              </div>
+              <img 
+                src={logo} 
+                alt="DesignFlow" 
+                className="h-16 w-auto object-contain dark:hidden"
+              />
+              <img 
+                src={logoDark} 
+                alt="DesignFlow" 
+                className="h-16 w-auto object-contain hidden dark:block"
+              />
             </div>
             <button 
               onClick={onClose}
-              className="text-slate-600 hover:text-slate-800 hover:bg-slate-100 p-2 rounded-lg transition-colors"
+              className="text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 p-2 rounded-lg transition-colors"
             >
               <X size={20} />
             </button>
@@ -109,7 +114,7 @@ export function Sidebar({ currentPage, onNavigate, isOpen, onClose }: SidebarPro
                 w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200
                 ${isActive 
                   ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/30' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }
               `}
             >
@@ -137,16 +142,16 @@ export function Sidebar({ currentPage, onNavigate, isOpen, onClose }: SidebarPro
       </nav>
 
       {/* User Profile */}
-      <div className="p-4 border-t border-slate-200">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+      <div className="p-4 border-t border-slate-200 dark:border-slate-700">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] ${
             isDesigner ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-green-400 to-emerald-500'
           }`}>
             {user?.avatar}
           </div>
           <div className="flex-1">
-            <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px]">{user?.nome}</p>
-            <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px]">
+            <p className="text-slate-800 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px]">{user?.nome?.split(' ')[0]}</p>
+            <p className="text-slate-500 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px]">
               {user?.tipo === 'designer' ? 'Designer' : 'Cliente'}
             </p>
           </div>

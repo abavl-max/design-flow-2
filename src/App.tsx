@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Hero } from './components/Hero';
 import { Sidebar } from './components/Sidebar';
 import { MenuButton } from './components/MenuButton';
+import { SplashScreen } from './components/SplashScreen';
 import { HomePage } from './pages/HomePage';
 import { ProjetosPage } from './pages/ProjetosPage';
 import { PerfilPage } from './pages/PerfilPage';
@@ -13,6 +14,8 @@ import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProjectsProvider } from './contexts/ProjectsContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { Toaster } from 'sonner@2.0.3';
 
 function AppContent() {
   const { user } = useAuth();
@@ -21,6 +24,12 @@ function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [paginaAnterior, setPaginaAnterior] = useState<string>('home'); // Rastreia a página de origem
+  const [showSplash, setShowSplash] = useState(true);
+  
+  // Mostra splash screen primeiro
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
   
   // Se não estiver logado, mostra a página de cadastro ou login
   if (!user) {
@@ -103,7 +112,8 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <Toaster position="top-right" richColors />
       {currentPage === 'home' && <Hero />}
       <MenuButton onClick={() => setIsSidebarOpen(true)} />
       <Sidebar 
@@ -121,10 +131,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ProjectsProvider>
-        <AppContent />
-      </ProjectsProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ProjectsProvider>
+          <AppContent />
+        </ProjectsProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

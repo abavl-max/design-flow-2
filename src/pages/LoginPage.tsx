@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth, UserType } from '../contexts/AuthContext';
 import { Lock, Mail, Briefcase, UserCircle2, ArrowLeft } from 'lucide-react';
+import logo from 'figma:asset/66a5e760f8a9be9e6930e55a9743b043d8f6d65e.png';
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
@@ -40,11 +41,8 @@ export function LoginPage({ onLoginSuccess, onBackToSignup }: LoginPageProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
-        {/* Logo/Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-2xl mb-4">
-            <Briefcase className="text-white" size={32} />
-          </div>
+        {/* Texto de boas vindas */}
+        <div className="text-center mb-6">
           <h1 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-2">
             DesignFlow
           </h1>

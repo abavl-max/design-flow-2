@@ -17,6 +17,7 @@ interface Tarefa {
   prioridade: string;
   comentarios: number;
   colunaOrigem?: string;
+  criadoPor?: string; // Email do designer que criou a tarefa
   anexos?: Array<{
     nome: string;
     tipo: 'imagem' | 'documento';
@@ -73,11 +74,16 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
   const [tarefaParaComentar, setTarefaParaComentar] = useState<number | null>(null);
   const [linkCopiado, setLinkCopiado] = useState(false);
   const [modalConvite, setModalConvite] = useState(false);
+  const [modalCompartilhar, setModalCompartilhar] = useState(false);
+  const [linkCompartilhadoCopiado, setLinkCompartilhadoCopiado] = useState(false);
   const chatRef = React.useRef<HTMLDivElement>(null);
   const mensagensRef = React.useRef<HTMLDivElement>(null);
   
+  // Buscar projeto real do contexto
+  const projetoReal = obterProjetoPorId(projectId);
+  
   // Mock data - em produção viria de uma API
-  const projeto = {
+  const projeto = projetoReal || {
     id: projectId,
     nome: projectId === 1 ? 'Redesign Website Corporativo' : 
           projectId === 2 ? 'App Mobile E-commerce' :
@@ -391,6 +397,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
               responsavel: 'Designer',
               prioridade: novaTarefa.prioridade,
               comentarios: 0,
+              criadoPor: user?.email || 'designer',
               anexos: anexosTarefa.length > 0 ? anexosTarefa : undefined
             }
           ]
@@ -402,11 +409,17 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
     setColunas(colunasAtualizadas);
 
     // Registrar atividade do dia
+    const projetoAtual = obterProjetoPorId(projectId);
+    const nomeDesigner = user?.email ? formatarNomeDesigner(user.email) : 'Designer';
+    const nomeAtividade = projetoAtual?.tipoColaboracao === 'grupo' 
+      ? `${novaTarefa.titulo} (por ${nomeDesigner})`
+      : novaTarefa.titulo;
+    
     const novasAtividades = [
       ...atividadesDoDia,
       {
         tipo: 'tarefa_criada' as const,
-        tarefa: novaTarefa.titulo,
+        tarefa: nomeAtividade,
         coluna: colunas.find(c => c.id === colunaAtual)?.titulo || '',
         timestamp: new Date(),
         prioridade: novaTarefa.prioridade
@@ -608,6 +621,64 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
     
     // Sincroniza mudanças no contexto com as colunas e atividades atualizadas
     sincronizarProjetoNoContexto(undefined, novasAtividades, colunasAtualizadas);
+  };
+
+  // Função para cliente aprovar tarefa em revisão
+  const aprovarTarefaCliente = (tarefaId: number) => {
+    // Encontra a tarefa na coluna de revisão
+    const colunaRevisao = colunas.find(col => col.id === 'revisao');
+    const tarefa = colunaRevisao?.tarefas.find(t => t.id === tarefaId);
+    
+    if (!tarefa) return;
+    
+    // Salva a coluna de origem na tarefa
+    const tarefaComOrigem = { ...tarefa, colunaOrigem: 'revisao' };
+    
+    // Move a tarefa para a coluna "Concluído"
+    const colunasAtualizadas = colunas.map(coluna => {
+      if (coluna.id === 'revisao') {
+        // Remove da coluna de revisão
+        return {
+          ...coluna,
+          tarefas: coluna.tarefas.filter(t => t.id !== tarefaId)
+        };
+      } else if (coluna.id === 'concluido') {
+        // Adiciona na coluna de concluídos
+        return {
+          ...coluna,
+          tarefas: [...coluna.tarefas, tarefaComOrigem]
+        };
+      }
+      return coluna;
+    });
+    
+    setColunas(colunasAtualizadas);
+    
+    // Registra na atividade do dia
+    const novaAtividade: AtividadeDiaria = {
+      tipo: 'status_alterado',
+      tarefa: tarefa.titulo,
+      coluna: 'Concluído',
+      colunaAnterior: 'Revisão do Cliente',
+      timestamp: new Date(),
+      prioridade: tarefa.prioridade
+    };
+    const novasAtividades = [novaAtividade, ...atividadesDoDia];
+    setAtividadesDoDia(novasAtividades);
+    
+    // Adiciona mensagem automática no chat
+    const novaMensagemSistema = {
+      id: Date.now(),
+      texto: `✅ Tarefa "${tarefa.titulo}" foi aprovada pelo cliente`,
+      remetente: 'Sistema',
+      tipoRemetente: 'sistema' as const,
+      horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      tarefaId: tarefaId
+    };
+    setListaMensagens(prev => [...prev, novaMensagemSistema]);
+    
+    // Sincroniza mudanças no contexto
+    sincronizarProjetoNoContexto([...listaMensagens, novaMensagemSistema], novasAtividades, colunasAtualizadas);
   };
 
   // Função para enviar tarefa para revisão do cliente
@@ -991,30 +1062,61 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
     });
   };
 
+  // Gerar link de compartilhamento para designers
+  const gerarLinkCompartilhamento = () => {
+    const projetoAtual = obterProjetoPorId(projectId);
+    if (projetoAtual?.linkCompartilhamento) {
+      return projetoAtual.linkCompartilhamento;
+    }
+    // Fallback caso não exista
+    const tokenUnico = `${projectId}-designer-${Math.random().toString(36).substring(2, 15)}`;
+    return `${window.location.origin}/projeto/convite/${tokenUnico}`;
+  };
+
+  const copiarLinkCompartilhamento = () => {
+    const link = gerarLinkCompartilhamento();
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCompartilhadoCopiado(true);
+      setTimeout(() => setLinkCompartilhadoCopiado(false), 2000);
+    });
+  };
+
+  // Função para formatar o nome do designer
+  const formatarNomeDesigner = (email: string): string => {
+    // Remove o domínio do email e formata o nome
+    const nome = email.split('@')[0];
+    // Capitaliza a primeira letra e substitui pontos/underscores por espaços
+    return nome
+      .replace(/[._]/g, ' ')
+      .split(' ')
+      .map(palavra => palavra.charAt(0).toUpperCase() + palavra.slice(1))
+      .join(' ');
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-4 md:py-8 px-4 md:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 py-4 md:py-8 px-4 md:px-6 lg:px-8">
       <div className="max-w-[1800px] mx-auto">
         {/* Header */}
         <div className="mb-6 md:mb-8">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-slate-600 hover:text-slate-800 mb-4 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-medium"
+            className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 mb-4 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-medium"
           >
             <ArrowLeft size={20} />
             {obterTextoVoltar()}
           </button>
           
-          <div className="bg-white rounded-2xl p-4 md:p-6 shadow-lg">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 md:p-6 shadow-lg border border-transparent dark:border-slate-700">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
               <div className="flex-1">
-                <h1 className="text-slate-800 mb-2 font-['Kumbh_Sans',sans-serif] text-[24px] md:text-[32px] font-bold leading-tight">
+                <h1 className="text-slate-800 dark:text-slate-100 mb-2 font-['Kumbh_Sans',sans-serif] text-[24px] md:text-[32px] font-bold leading-tight">
                   {projeto.nome}
                 </h1>
-                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] md:text-[16px] font-normal leading-[20px]">
+                <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] md:text-[16px] font-normal leading-[20px]">
                   Cliente: {projeto.cliente}
                 </p>
                 {isCliente && (
-                  <div className="flex items-center gap-2 mt-2 text-slate-500">
+                  <div className="flex items-center gap-2 mt-2 text-slate-500 dark:text-slate-400">
                     <Eye size={16} />
                     <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[16px]">
                       Modo Visualização
@@ -1024,22 +1126,22 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
               </div>
               <div className="flex items-center gap-3 md:gap-4 self-start">
                 <div className="text-left md:text-right">
-                  <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] md:text-[14px] font-medium leading-[16px] mb-1">
+                  <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[12px] md:text-[14px] font-medium leading-[16px] mb-1">
                     Progresso Geral
                   </p>
-                  <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[20px] md:text-[24px] font-bold leading-[28px]">
+                  <p className="text-slate-800 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[20px] md:text-[24px] font-bold leading-[28px]">
                     {calcularProgresso()}%
                   </p>
                 </div>
-                <span className="bg-blue-100 text-blue-700 px-3 md:px-4 py-1.5 md:py-2 rounded-full font-['Kumbh_Sans',sans-serif] text-[12px] md:text-[14px] font-semibold leading-[16px] whitespace-nowrap">
+                <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 md:px-4 py-1.5 md:py-2 rounded-full font-['Kumbh_Sans',sans-serif] text-[12px] md:text-[14px] font-semibold leading-[16px] whitespace-nowrap">
                   {projeto.status}
                 </span>
               </div>
             </div>
             
-            {/* Botão de Convite - Apenas para Designers */}
+            {/* Botões de Convite e Compartilhamento - Apenas para Designers */}
             {isDesigner && (
-              <div className="mt-4">
+              <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   onClick={() => setModalConvite(true)}
                   className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2.5 rounded-xl hover:shadow-lg transition-all duration-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold inline-flex items-center gap-2 hover:-translate-y-0.5"
@@ -1047,6 +1149,16 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                   <UserPlus size={18} />
                   Convidar Cliente
                 </button>
+                
+                {obterProjetoPorId(projectId)?.tipoColaboracao === 'grupo' && (
+                  <button
+                    onClick={() => setModalCompartilhar(true)}
+                    className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-4 py-2.5 rounded-xl hover:shadow-lg transition-all duration-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold inline-flex items-center gap-2 hover:-translate-y-0.5"
+                  >
+                    <Users size={18} />
+                    Compartilhar com Designers
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1056,8 +1168,8 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
           {/* Kanban Board - 2 colunas */}
           <div className="xl:col-span-2">
-            <div className="bg-white rounded-2xl p-4 md:p-6 shadow-lg">
-              <h2 className="text-slate-800 mb-4 md:mb-6 font-['Kumbh_Sans',sans-serif] text-[20px] md:text-[24px] font-bold leading-[28px]">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 md:p-6 shadow-lg border border-transparent dark:border-slate-700">
+              <h2 className="text-slate-800 dark:text-slate-100 mb-4 md:mb-6 font-['Kumbh_Sans',sans-serif] text-[20px] md:text-[24px] font-bold leading-[28px]">
                 Quadro Kanban
               </h2>
               
@@ -1073,16 +1185,30 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                       </p>
                     </div>
                     
-                    <div className="bg-slate-50 rounded-b-xl p-3 space-y-3 min-h-[300px] md:min-h-[400px] flex flex-col">
+                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-b-xl p-3 space-y-3 min-h-[300px] md:min-h-[400px] flex flex-col">
                       {coluna.tarefas.map((tarefa) => (
                         <div
                           key={tarefa.id}
-                          className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 relative"
+                          className="bg-white dark:bg-slate-700 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-600 relative"
                         >
                           <div className="flex items-start justify-between mb-3">
-                            <h4 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px] flex-1">
-                              {tarefa.titulo}
-                            </h4>
+                            <div className="flex-1">
+                              <h4 className="text-slate-800 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px]">
+                                {tarefa.titulo}
+                              </h4>
+                              {/* Debug - ver console do navegador */}
+                              {console.log('Debug tarefa:', { 
+                                titulo: tarefa.titulo, 
+                                criadoPor: tarefa.criadoPor, 
+                                tipoColaboracao: projeto?.tipoColaboracao,
+                                projetoCompleto: projeto
+                              })}
+                              {projeto?.tipoColaboracao === 'grupo' && tarefa.criadoPor && (
+                                <p className="text-slate-500 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[11px] font-normal leading-[14px] mt-1">
+                                  Criado por: {formatarNomeDesigner(tarefa.criadoPor)}
+                                </p>
+                              )}
+                            </div>
                             {isDesigner && (
                               <div className="relative">
                                 <button 
@@ -1098,7 +1224,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                                       className="fixed inset-0 z-10" 
                                       onClick={() => setMenuAberto(null)}
                                     />
-                                    <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-lg shadow-lg py-1 w-48 z-20 animate-fadeIn">
+                                    <div className="absolute right-0 top-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg py-1 w-48 z-20 animate-fadeIn">
                                       {coluna.id !== 'concluido' && coluna.id !== 'revisao' && (
                                         <button
                                           onClick={() => enviarParaRevisao(tarefa.id, coluna.id)}
@@ -1156,7 +1282,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                             )}
                           </div>
                           
-                          <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-3">
+                          <p className="text-slate-600 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[16px] mb-3">
                             {tarefa.descricao}
                           </p>
                           
@@ -1166,7 +1292,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                               {tarefa.anexos.map((anexo, idx) => (
                                 <div 
                                   key={idx} 
-                                  className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 cursor-pointer group text-xs"
+                                  className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer group text-xs"
                                   onClick={() => window.open(anexo.url, '_blank')}
                                 >
                                   {anexo.tipo === 'imagem' ? (
@@ -1180,6 +1306,17 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                                 </div>
                               ))}
                             </div>
+                          )}
+                          
+                          {/* Botão de aprovação para clientes em tarefas de revisão */}
+                          {isCliente && coluna.id === 'revisao' && (
+                            <button
+                              onClick={() => aprovarTarefaCliente(tarefa.id)}
+                              className="w-full mb-3 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 hover:border-green-300 transition-all font-['Kumbh_Sans',sans-serif] text-[11px] font-medium flex items-center justify-center gap-2"
+                            >
+                              <CheckCircle2 size={14} />
+                              Aprovar Tarefa
+                            </button>
                           )}
                           
                           <div className="flex items-center justify-between">
@@ -1207,7 +1344,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                       {isDesigner && (
                         <button
                           onClick={() => abrirModal(coluna.id)}
-                          className="mt-auto border-2 border-dashed border-slate-300 rounded-xl p-4 hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center gap-2 text-slate-500 hover:text-blue-600"
+                          className="mt-auto border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
                         >
                           <Plus size={18} />
                           <span className="font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px]">
@@ -1224,13 +1361,13 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
 
           {/* Chat - 1 coluna */}
           <div ref={chatRef} className="xl:col-span-1">
-            <div className="bg-white rounded-2xl shadow-lg flex flex-col h-[600px] md:h-[700px] xl:h-[800px]">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg flex flex-col h-[600px] md:h-[700px] xl:h-[800px] border border-transparent dark:border-slate-700">
               {/* Chat Header */}
-              <div className="p-4 md:p-6 border-b border-slate-200">
-                <h2 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[18px] md:text-[20px] font-bold leading-[24px]">
+              <div className="p-4 md:p-6 border-b border-slate-200 dark:border-slate-700">
+                <h2 className="text-slate-800 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[18px] md:text-[20px] font-bold leading-[24px]">
                   Chat do Projeto
                 </h2>
-                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[13px] md:text-[14px] font-normal leading-[16px] mt-1">
+                <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[13px] md:text-[14px] font-normal leading-[16px] mt-1">
                   Comunicação com o cliente
                 </p>
               </div>
@@ -1355,17 +1492,17 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
               </div>
 
               {/* Input de mensagem */}
-              <div className="p-4 md:p-6 border-t border-slate-200 bg-white">
+              <div className="p-4 md:p-6 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
                 <div className="space-y-3">
                   {/* Área de Composição de Mensagem */}
-                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-200">
+                  <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-3 border border-slate-200 dark:border-slate-700">
                     {/* Seletor de Tarefa Compacto */}
                     <div className="flex items-center gap-2">
-                      <MessageCircle size={16} className="text-slate-400 flex-shrink-0" />
+                      <MessageCircle size={16} className="text-slate-400 dark:text-slate-500 flex-shrink-0" />
                       <select
                         value={tarefaParaComentar || ''}
                         onChange={(e) => setTarefaParaComentar(e.target.value ? Number(e.target.value) : null)}
-                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[13px] bg-white hover:border-blue-400 transition-colors"
+                        className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[13px] bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
                       >
                         <option value="">Comentário Geral</option>
                         {colunas.map((coluna) => (
@@ -1385,7 +1522,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                             setTarefaFiltrada(null);
                             setTarefaSelecionada(null);
                           }}
-                          className="text-slate-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                          className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex-shrink-0"
                           title="Limpar seleção"
                         >
                           <X size={16} />
@@ -1397,12 +1534,12 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                     {arquivosSelecionados.length > 0 && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[12px] font-semibold">
+                          <span className="text-slate-600 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[12px] font-semibold">
                             {arquivosSelecionados.length} {arquivosSelecionados.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'}
                           </span>
                           <button
                             onClick={() => setArquivosSelecionados([])}
-                            className="text-red-500 hover:text-red-700 text-xs font-semibold"
+                            className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-xs font-semibold"
                           >
                             Limpar todos
                           </button>
@@ -1456,7 +1593,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                       />
                       <button
                         onClick={() => inputArquivoRef.current?.click()}
-                        className="bg-slate-100 text-slate-600 px-3 py-2.5 rounded-lg hover:bg-slate-200 transition-all flex items-center gap-2 border border-slate-300"
+                        className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all flex items-center gap-2 border border-slate-300 dark:border-slate-600"
                         title="Anexar arquivo"
                       >
                         <Paperclip size={18} />
@@ -1467,7 +1604,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                         onChange={(e) => setMensagem(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && enviarMensagem()}
                         placeholder="Digite sua mensagem..."
-                        className="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[14px] bg-white"
+                        className="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[14px] bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                       />
                       <button
                         onClick={enviarMensagem}
@@ -1499,16 +1636,16 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
 
       {/* Modal Adicionar Tarefa */}
       {modalAberto && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full border border-transparent dark:border-slate-700">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[20px] font-bold leading-[24px]">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-slate-800 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[20px] font-bold leading-[24px]">
                 Nova Tarefa
               </h3>
               <button
                 onClick={fecharModal}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
               >
                 <X size={24} />
               </button>
@@ -1517,7 +1654,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
             {/* Conteúdo */}
             <div className="p-6 space-y-4">
               <div>
-                <label className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] mb-2 block">
+                <label className="text-slate-700 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] mb-2 block">
                   Título da Tarefa *
                 </label>
                 <input
@@ -1525,12 +1662,12 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                   value={novaTarefa.titulo}
                   onChange={(e) => setNovaTarefa({ ...novaTarefa, titulo: e.target.value })}
                   placeholder="Ex: Criar wireframes da homepage"
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px]"
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px] bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                 />
               </div>
 
               <div>
-                <label className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] mb-2 block">
+                <label className="text-slate-700 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] mb-2 block">
                   Descrição
                 </label>
                 <textarea
@@ -1538,7 +1675,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                   onChange={(e) => setNovaTarefa({ ...novaTarefa, descricao: e.target.value })}
                   placeholder="Descreva os detalhes da tarefa..."
                   rows={4}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px] resize-none"
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-['Kumbh_Sans',sans-serif] text-[14px] resize-none bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                 />
               </div>
 
@@ -1894,20 +2031,20 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
 
       {/* Modal de Convite para Cliente */}
       {modalConvite && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full shadow-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-transparent dark:border-slate-700">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl flex items-center justify-center">
-                  <UserPlus size={24} className="text-indigo-600" />
+                <div className="w-12 h-12 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/50 dark:to-purple-900/50 rounded-xl flex items-center justify-center">
+                  <UserPlus size={24} className="text-indigo-600 dark:text-indigo-400" />
                 </div>
-                <h3 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[24px] font-bold leading-[28px]">
+                <h3 className="text-slate-800 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[24px] font-bold leading-[28px]">
                   Convidar Cliente
                 </h3>
               </div>
               <button
                 onClick={() => setModalConvite(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
               >
                 <X size={24} />
               </button>
@@ -1915,28 +2052,28 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
 
             <div className="space-y-6">
               {/* Informações do Projeto */}
-              <div className="bg-slate-50 rounded-xl p-4">
-                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium leading-[18px] mb-2">
+              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 border border-transparent dark:border-slate-600">
+                <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium leading-[18px] mb-2">
                   Projeto:
                 </p>
-                <p className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
+                <p className="text-slate-800 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
                   {projeto.nome}
                 </p>
-                <p className="text-slate-600 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px] mt-1">
+                <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px] mt-1">
                   Cliente: {projeto.cliente}
                 </p>
               </div>
 
               {/* Descrição */}
               <div>
-                <p className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[15px] font-normal leading-[22px]">
+                <p className="text-slate-700 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[15px] font-normal leading-[22px]">
                   Compartilhe este link de convite com seu cliente para que ele possa acompanhar o progresso do projeto em tempo real.
                 </p>
               </div>
 
               {/* Link de Convite */}
               <div className="space-y-3">
-                <label className="text-slate-700 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px]">
+                <label className="text-slate-700 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px]">
                   Link de Convite:
                 </label>
                 <div className="flex gap-2">
@@ -1944,7 +2081,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                     type="text"
                     value={gerarLinkConvite()}
                     readOnly
-                    className="flex-1 bg-slate-100 border border-slate-300 rounded-xl px-4 py-3 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal text-slate-700"
+                    className="flex-1 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal text-slate-700 dark:text-slate-200"
                   />
                   <button
                     onClick={copiarLinkConvite}
@@ -1970,14 +2107,14 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
               </div>
 
               {/* Informações sobre o convite */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
                 <div className="flex gap-3">
-                  <Users size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                  <Users size={20} className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-blue-800 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px] mb-1">
+                    <p className="text-blue-800 dark:text-blue-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px] mb-1">
                       O que o cliente pode fazer:
                     </p>
-                    <ul className="text-blue-700 font-['Kumbh_Sans',sans-serif] text-[13px] font-normal leading-[20px] space-y-1">
+                    <ul className="text-blue-700 dark:text-blue-400 font-['Kumbh_Sans',sans-serif] text-[13px] font-normal leading-[20px] space-y-1">
                       <li>✓ Visualizar o quadro Kanban e todas as tarefas</li>
                       <li>✓ Participar do chat e enviar mensagens</li>
                       <li>✓ Acompanhar o progresso do projeto em tempo real</li>
@@ -1991,7 +2128,7 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setModalConvite(false)}
-                  className="flex-1 px-6 py-3 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                  className="flex-1 px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
                 >
                   Fechar
                 </button>
@@ -2005,6 +2142,149 @@ export function ProjectDetailPage({ projectId, onBack, paginaOrigem = 'home' }: 
                   <LinkIcon size={18} />
                   Copiar e Compartilhar
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Compartilhamento com Designers */}
+      {modalCompartilhar && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl animate-in fade-in duration-200">
+            <div className="p-6 md:p-8">
+              {/* Header do Modal */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/50 dark:to-cyan-900/50 rounded-xl flex items-center justify-center">
+                    <Users size={24} className="text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-slate-900 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[22px] font-bold leading-[28px]">
+                      Compartilhar com Designers
+                    </h3>
+                    <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px]">
+                      Projeto em Grupo
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setModalCompartilhar(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Informações do Projeto */}
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
+                  <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-medium leading-[18px] mb-2">
+                    Projeto:
+                  </p>
+                  <p className="text-slate-800 dark:text-slate-100 font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold leading-[20px]">
+                    {projeto.nome}
+                  </p>
+                  <p className="text-slate-600 dark:text-slate-400 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal leading-[18px] mt-1">
+                    Cliente: {projeto.cliente}
+                  </p>
+                </div>
+
+                {/* Descrição */}
+                <div>
+                  <p className="text-slate-700 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[15px] font-normal leading-[22px]">
+                    Compartilhe este link com outros designers para dar acesso completo ao projeto. Eles poderão editar tarefas, participar do chat e colaborar em tempo real.
+                  </p>
+                </div>
+
+                {/* Link de Compartilhamento */}
+                <div className="space-y-3">
+                  <label className="text-slate-700 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px]">
+                    Link de Compartilhamento:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={gerarLinkCompartilhamento()}
+                      readOnly
+                      className="flex-1 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 font-['Kumbh_Sans',sans-serif] text-[14px] font-normal text-slate-700 dark:text-slate-300"
+                    />
+                    <button
+                      onClick={copiarLinkCompartilhamento}
+                      className={`px-6 py-3 rounded-xl transition-all duration-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center gap-2 ${
+                        linkCompartilhadoCopiado
+                          ? 'bg-green-500 text-white'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {linkCompartilhadoCopiado ? (
+                        <>
+                          <Check size={18} />
+                          Copiado!
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={18} />
+                          Copiar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Informações sobre o acesso */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <Users size={20} className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-blue-800 dark:text-blue-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px] mb-1">
+                        O que os designers podem fazer:
+                      </p>
+                      <ul className="text-blue-700 dark:text-blue-300 font-['Kumbh_Sans',sans-serif] text-[13px] font-normal leading-[20px] space-y-1">
+                        <li>✓ Criar, editar e mover tarefas no Kanban</li>
+                        <li>✓ Participar do chat e colaborar com a equipe</li>
+                        <li>✓ Acompanhar e atualizar o progresso do projeto</li>
+                        <li>✓ Comentar e adicionar anexos nas tarefas</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Colaboradores atuais */}
+                {obterProjetoPorId(projectId)?.colaboradores && obterProjetoPorId(projectId)!.colaboradores!.length > 1 && (
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                    <p className="text-slate-700 dark:text-slate-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[18px] mb-3">
+                      Colaboradores atuais ({obterProjetoPorId(projectId)!.colaboradores!.length}):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {obterProjetoPorId(projectId)!.colaboradores!.map((email, index) => (
+                        <div key={index} className="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-lg font-['Kumbh_Sans',sans-serif] text-[13px] font-medium">
+                          {email}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Botões de ação */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setModalCompartilhar(false)}
+                    className="flex-1 px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    onClick={() => {
+                      copiarLinkCompartilhamento();
+                      // Em produção, poderia enviar email automaticamente
+                    }}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2"
+                  >
+                    <LinkIcon size={18} />
+                    Copiar e Compartilhar
+                  </button>
+                </div>
               </div>
             </div>
           </div>

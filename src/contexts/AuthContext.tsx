@@ -32,7 +32,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (email: string, senha: string, tipo: UserType) => Promise<boolean>;
-  signup: (email: string, tipo: UserType) => void;
+  signup: (email: string, tipo: UserType, perfilInicial?: Partial<PerfilInfo>) => void;
   cadastrar: (nome: string, email: string, senha: string, tipo: UserType) => Promise<boolean>;
   logout: () => void;
   updateProfile: (perfil: PerfilInfo) => void;
@@ -107,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
-  const signup = (email: string, tipo: UserType) => {
+  const signup = (email: string, tipo: UserType, perfilInicial?: Partial<PerfilInfo>) => {
     // Simulação de signup - em produção, isso seria uma chamada à API
     const newUser: User = {
       id: Date.now(),
@@ -116,7 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tipo,
       avatar: '',
       perfil: {
-        membroDesde: new Date().toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+        membroDesde: new Date().toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+        ...perfilInicial
       }
     };
     

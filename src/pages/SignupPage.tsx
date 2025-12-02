@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Mail, Lock, Briefcase, Building, Phone, AlertCircle, Check, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import logo from 'figma:asset/257f4f782f48d7780818bcd4c6bcd14b3b926192.png';
 
 interface SignupPageProps {
   onSignupSuccess: () => void;
@@ -12,6 +13,7 @@ export function SignupPage({ onSignupSuccess, onBackToLogin }: SignupPageProps) 
   const [tipoUsuario, setTipoUsuario] = useState<'designer' | 'cliente' | null>(null);
   const [formulario, setFormulario] = useState({
     nome: '',
+    sobrenome: '',
     email: '',
     senha: '',
     confirmarSenha: '',
@@ -38,7 +40,11 @@ export function SignupPage({ onSignupSuccess, onBackToLogin }: SignupPageProps) 
     }
 
     if (!formulario.nome.trim()) {
-      novosErros.nome = 'Nome completo é obrigatório';
+      novosErros.nome = 'Nome é obrigatório';
+    }
+
+    if (!formulario.sobrenome.trim()) {
+      novosErros.sobrenome = 'Sobrenome é obrigatório';
     }
 
     if (!formulario.email.trim()) {
@@ -87,7 +93,32 @@ export function SignupPage({ onSignupSuccess, onBackToLogin }: SignupPageProps) 
       
       // Faz o login automático após cadastro
       setTimeout(() => {
-        signup(formulario.email, tipoUsuario!);
+        // Monta o perfil inicial com os dados do formulário
+        const perfilInicial: any = {};
+        
+        if (formulario.telefone) {
+          perfilInicial.telefone = formulario.telefone;
+        }
+        
+        if (tipoUsuario === 'designer') {
+          if (formulario.cargo) perfilInicial.cargo = formulario.cargo;
+        } else if (tipoUsuario === 'cliente') {
+          if (formulario.empresa) perfilInicial.empresaNome = formulario.empresa;
+          if (formulario.cargo) perfilInicial.cargo = formulario.cargo;
+        }
+        
+        signup(formulario.email, tipoUsuario!, perfilInicial);
+        
+        // Atualiza o nome e avatar após o signup
+        const savedUser = localStorage.getItem('designflow_user');
+        if (savedUser) {
+          const user = JSON.parse(savedUser);
+          const nomeCompleto = `${formulario.nome} ${formulario.sobrenome}`;
+          user.nome = nomeCompleto;
+          user.avatar = `${formulario.nome[0]}${formulario.sobrenome[0]}`.toUpperCase();
+          localStorage.setItem('designflow_user', JSON.stringify(user));
+        }
+        
         onSignupSuccess();
       }, 1500);
     }, 2000);
@@ -145,10 +176,10 @@ export function SignupPage({ onSignupSuccess, onBackToLogin }: SignupPageProps) 
       <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 max-w-2xl w-full">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="font-['Maven_Pro',sans-serif] text-[36px] font-bold leading-[44px] text-slate-900 mb-2">
+          <h1 className="font-['Maven_Pro',sans-serif] text-[36px] font-bold leading-[44px] text-slate-900 mb-2 text-center">
             Criar Conta
           </h1>
-          <p className="font-['Kumbh_Sans',sans-serif] text-[16px] font-normal leading-[24px] text-slate-600">
+          <p className="font-['Kumbh_Sans',sans-serif] text-[16px] font-normal leading-[24px] text-slate-600 text-center">
             Preencha seus dados para começar a usar o DesignFlow
           </p>
         </div>
@@ -244,31 +275,61 @@ export function SignupPage({ onSignupSuccess, onBackToLogin }: SignupPageProps) 
               </button>
             </div>
 
-            {/* Nome Completo */}
-            <div>
-              <label htmlFor="nome" className="block font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[20px] text-slate-700 mb-2">
-                Nome Completo *
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  type="text"
-                  id="nome"
-                  name="nome"
-                  value={formulario.nome}
-                  onChange={handleChange}
-                  className={`w-full pl-11 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[15px] transition-all ${
-                    erros.nome ? 'border-red-500 bg-red-50' : 'border-slate-300 bg-white'
-                  }`}
-                  placeholder="Digite seu nome completo"
-                />
-              </div>
-              {erros.nome && (
-                <div className="flex items-center gap-1 mt-2 text-red-600">
-                  <AlertCircle size={14} />
-                  <span className="font-['Kumbh_Sans',sans-serif] text-[12px]">{erros.nome}</span>
+            {/* Nome e Sobrenome */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Nome */}
+              <div>
+                <label htmlFor="nome" className="block font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[20px] text-slate-700 mb-2">
+                  Nome *
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="text"
+                    id="nome"
+                    name="nome"
+                    value={formulario.nome}
+                    onChange={handleChange}
+                    className={`w-full pl-11 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[15px] transition-all ${
+                      erros.nome ? 'border-red-500 bg-red-50' : 'border-slate-300 bg-white'
+                    }`}
+                    placeholder="Seu nome"
+                  />
                 </div>
-              )}
+                {erros.nome && (
+                  <div className="flex items-center gap-1 mt-2 text-red-600">
+                    <AlertCircle size={14} />
+                    <span className="font-['Kumbh_Sans',sans-serif] text-[12px]">{erros.nome}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Sobrenome */}
+              <div>
+                <label htmlFor="sobrenome" className="block font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[20px] text-slate-700 mb-2">
+                  Sobrenome *
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="text"
+                    id="sobrenome"
+                    name="sobrenome"
+                    value={formulario.sobrenome}
+                    onChange={handleChange}
+                    className={`w-full pl-11 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-['Kumbh_Sans',sans-serif] text-[15px] transition-all ${
+                      erros.sobrenome ? 'border-red-500 bg-red-50' : 'border-slate-300 bg-white'
+                    }`}
+                    placeholder="Seu sobrenome"
+                  />
+                </div>
+                {erros.sobrenome && (
+                  <div className="flex items-center gap-1 mt-2 text-red-600">
+                    <AlertCircle size={14} />
+                    <span className="font-['Kumbh_Sans',sans-serif] text-[12px]">{erros.sobrenome}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Email */}

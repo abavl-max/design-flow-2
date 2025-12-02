@@ -11,6 +11,10 @@ export interface Projeto {
   progresso: number;
   cor?: string;
   criadoPor: string; // userId do designer que criou
+  arquivado?: boolean; // Novo campo para projetos arquivados
+  tipoColaboracao?: 'individual' | 'grupo'; // Tipo de colaboração do projeto
+  linkCompartilhamento?: string; // Link único para compartilhar acesso ao projeto
+  colaboradores?: string[]; // Emails dos designers colaboradores
   tarefas?: {
     concluidas: number;
     emAndamento: number;
@@ -48,6 +52,7 @@ export interface Projeto {
       prioridade: string;
       comentarios: number;
       colunaOrigem?: string;
+      criadoPor?: string;
       anexos?: Array<{
         nome: string;
         tipo: 'imagem' | 'documento';
@@ -80,6 +85,21 @@ export interface Projeto {
     dataAvaliacao: string;
     pontosFortes: string[];
     impacto: string;
+  };
+  avaliacaoCliente?: {
+    estrelas: number;
+    comentario: string;
+    nomeAvaliador: string;
+    cargoAvaliador: string;
+    dataAvaliacao: string;
+    pontosFortes: string[];
+    impacto: string;
+  };
+  avaliacaoDesigner?: {
+    estrelas: number;
+    comentario: string;
+    nomeAvaliador: string;
+    dataAvaliacao: string;
   };
 }
 
@@ -180,7 +200,7 @@ const PROJETOS_DEMO: Projeto[] = [
 export function ProjectsProvider({ children }: { children: ReactNode }) {
   const [projetos, setProjetos] = useState<Projeto[]>([]);
 
-  // Carrega projetos demo se for conta demo
+  // Carrega projetos do localStorage ao iniciar
   useEffect(() => {
     const savedUser = localStorage.getItem('designflow_user');
     if (savedUser) {
@@ -188,6 +208,12 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       // Carrega projetos demo apenas para o usuário demo
       if (user.email === 'designer@designflow.com' || user.email === 'cliente@empresa.com') {
         setProjetos(PROJETOS_DEMO);
+      } else {
+        // Para contas novas, tenta carregar projetos salvos
+        const savedProjects = localStorage.getItem(`designflow_projects_${user.id}`);
+        if (savedProjects) {
+          setProjetos(JSON.parse(savedProjects));
+        }
       }
     }
   }, []);
@@ -201,8 +227,13 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
         if (user.email === 'designer@designflow.com' || user.email === 'cliente@empresa.com') {
           setProjetos(PROJETOS_DEMO);
         } else {
-          // Para contas novas, limpa os projetos
-          setProjetos([]);
+          // Para contas novas, tenta carregar projetos salvos
+          const savedProjects = localStorage.getItem(`designflow_projects_${user.id}`);
+          if (savedProjects) {
+            setProjetos(JSON.parse(savedProjects));
+          } else {
+            setProjetos([]);
+          }
         }
       } else {
         // Se não há usuário logado, limpa os projetos
@@ -213,6 +244,18 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     window.addEventListener('designflow_user_changed', handleUserChange);
     return () => window.removeEventListener('designflow_user_changed', handleUserChange);
   }, []);
+
+  // Salva projetos no localStorage sempre que mudam (exceto para usuários demo)
+  useEffect(() => {
+    const savedUser = localStorage.getItem('designflow_user');
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      // Não salva para usuários demo
+      if (user.email !== 'designer@designflow.com' && user.email !== 'cliente@empresa.com') {
+        localStorage.setItem(`designflow_projects_${user.id}`, JSON.stringify(projetos));
+      }
+    }
+  }, [projetos]);
 
   const adicionarProjeto = (projeto: Omit<Projeto, 'id'>) => {
     console.log('ProjectsContext - projetos atuais:', projetos.map(p => ({ id: p.id, nome: p.nome })));

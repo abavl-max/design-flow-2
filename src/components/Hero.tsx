@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sparkles, CheckCircle2 } from 'lucide-react';
+import logo from 'figma:asset/c6b3d718af7822b20752d7f9484ce8abffe356d6.png';
 
 export function Hero() {
   return (
@@ -10,13 +11,22 @@ export function Hero() {
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
       
       <div className="relative py-12 md:py-20 px-4 md:px-5 text-center">
+        {/* Logo no topo */}
+        <div className="flex justify-center mb-6 md:mb-8">
+          <img 
+            src={logo} 
+            alt="DesignFlow" 
+            className="h-12 md:h-14 w-auto object-contain drop-shadow-2xl"
+          />
+        </div>
+        
         <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-3 md:px-4 py-1.5 md:py-2 mb-4 md:mb-6">
           <Sparkles className="text-yellow-300" size={14} />
           <span className="text-white/90 font-['Kumbh_Sans',sans-serif] text-[12px] md:text-[14px] font-semibold leading-[16px]">Plataforma de Gestão de Design</span>
         </div>
         
         <h1 className="text-white mb-4 max-w-4xl mx-auto drop-shadow-lg font-['Maven_Pro',sans-serif] text-[28px] md:text-[48px] font-bold leading-tight md:leading-[58px]">
-          DesignFlow: Transparência que Constrói Confiança.
+          Transparência que Constrói Confiança.
         </h1>
         
         <p className="text-blue-100 mb-8 md:mb-12 max-w-3xl mx-auto font-['Kumbh_Sans',sans-serif] text-[16px] md:text-[18px] font-normal leading-[24px] px-2">
