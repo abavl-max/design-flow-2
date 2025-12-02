@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth, UserType } from '../contexts/AuthContext';
 import { Lock, Mail, Briefcase, UserCircle2, ArrowLeft } from 'lucide-react';
-import logo from 'figma:asset/66a5e760f8a9be9e6930e55a9743b043d8f6d65e.png';
+//import logo from 'figma:asset/66a5e760f8a9be9e6930e55a9743b043d8f6d65e.png';
+import logo from 'src/assets/Logo-Light.jpeg';
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
