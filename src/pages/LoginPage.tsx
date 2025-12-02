@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth, UserType } from '../contexts/AuthContext';
 import { Lock, Mail, Briefcase, UserCircle2, ArrowLeft } from 'lucide-react';
 //import logo from 'figma:asset/66a5e760f8a9be9e6930e55a9743b043d8f6d65e.png';
-import logo from 'src/assets/Logo-Light.jpeg';
+import logo from '@/assets/Logo-Light.jpeg';
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
@@ -44,6 +44,13 @@ export function LoginPage({ onLoginSuccess, onBackToSignup }: LoginPageProps) {
       <div className="w-full max-w-md">
         {/* Texto de boas vindas */}
         <div className="text-center mb-6">
+          <div className="flex justify-center mb-4">
+            <img
+              src={logo}
+              alt="DesignFlow Logo"
+              className="h-12 w-auto object-contain"
+            />
+          </div>
           <h1 className="text-slate-800 font-['Kumbh_Sans',sans-serif] text-[32px] font-bold leading-[38px] mb-2">
             DesignFlow
           </h1>
@@ -63,21 +70,18 @@ export function LoginPage({ onLoginSuccess, onBackToSignup }: LoginPageProps) {
               <button
                 type="button"
                 onClick={() => setUserType('designer')}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  userType === 'designer'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
+                className={`p-4 rounded-xl border-2 transition-all ${userType === 'designer'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-slate-200 hover:border-slate-300'
+                  }`}
               >
                 <Briefcase
-                  className={`mx-auto mb-2 ${
-                    userType === 'designer' ? 'text-blue-600' : 'text-slate-400'
-                  }`}
+                  className={`mx-auto mb-2 ${userType === 'designer' ? 'text-blue-600' : 'text-slate-400'
+                    }`}
                   size={24}
                 />
-                <p className={`font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] ${
-                  userType === 'designer' ? 'text-blue-600' : 'text-slate-600'
-                }`}>
+                <p className={`font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] ${userType === 'designer' ? 'text-blue-600' : 'text-slate-600'
+                  }`}>
                   Designer
                 </p>
                 <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px] mt-1">
@@ -88,21 +92,18 @@ export function LoginPage({ onLoginSuccess, onBackToSignup }: LoginPageProps) {
               <button
                 type="button"
                 onClick={() => setUserType('cliente')}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  userType === 'cliente'
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
+                className={`p-4 rounded-xl border-2 transition-all ${userType === 'cliente'
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-slate-200 hover:border-slate-300'
+                  }`}
               >
                 <UserCircle2
-                  className={`mx-auto mb-2 ${
-                    userType === 'cliente' ? 'text-green-600' : 'text-slate-400'
-                  }`}
+                  className={`mx-auto mb-2 ${userType === 'cliente' ? 'text-green-600' : 'text-slate-400'
+                    }`}
                   size={24}
                 />
-                <p className={`font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] ${
-                  userType === 'cliente' ? 'text-green-600' : 'text-slate-600'
-                }`}>
+                <p className={`font-['Kumbh_Sans',sans-serif] text-[14px] font-semibold leading-[16px] ${userType === 'cliente' ? 'text-green-600' : 'text-slate-600'
+                  }`}>
                   Cliente
                 </p>
                 <p className="text-slate-500 font-['Kumbh_Sans',sans-serif] text-[12px] font-normal leading-[14px] mt-1">
@@ -157,9 +158,8 @@ export function LoginPage({ onLoginSuccess, onBackToSignup }: LoginPageProps) {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full bg-blue-500 text-white py-3 rounded-xl font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold hover:bg-blue-600 transition-colors ${
-                loading ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className={`w-full bg-blue-500 text-white py-3 rounded-xl font-['Kumbh_Sans',sans-serif] text-[16px] font-semibold hover:bg-blue-600 transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
             >
               {loading ? 'Processando...' : 'Entrar'}
             </button>

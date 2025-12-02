@@ -3,8 +3,8 @@ import { Home, FolderKanban, User, Settings, HelpCircle, ChevronRight, X, LogOut
 import { useAuth } from '../contexts/AuthContext';
 //import logo from 'figma:asset/257f4f782f48d7780818bcd4c6bcd14b3b926192.png';
 //import logoDark from 'figma:asset/c6b3d718af7822b20752d7f9484ce8abffe356d6.png';
-import logo from 'src/assets/Logo-Light.jpeg';
-import logoDark from 'src/assets/Logo-Dark.jpeg';
+import logo from '@/assets/Logo-Light.jpeg';
+import logoDark from '@/assets/Logo-Dark.jpeg';
 
 interface SidebarProps {
   currentPage: string;
